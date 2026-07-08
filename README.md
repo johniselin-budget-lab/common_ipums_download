@@ -41,26 +41,29 @@ Rscript download_ipums.R config/parameters.cps.yaml   # a different parameter fi
 Rscript download_ipums.R config/parameters.yaml --overwrite   # force a re-pull
 ```
 
-Re-running is safe: unless `--overwrite` is passed, an output folder that already
-holds a codebook is left untouched. Because the default folder id is a fresh UTC
-timestamp, a normal re-run creates a *new* pull rather than clobbering an old one.
+Each pull needs a **run id** (`output.id`) — a specific, meaningful name you set
+(an empty id is a hard error). Re-running is safe: unless `--overwrite` is passed,
+an output folder that already holds a codebook is left untouched. Re-run with the
+**same id** in `per_year` mode to add only the missing years; use a **new id** for
+a fresh pull.
 
 ## What gets stored, and where
 
-Output goes to `<save_location>/<version>/<id>/`, e.g.:
+Output goes to `<save_location>/<id>/` — one named run folder directly under the
+dataset (no version layer), e.g.:
 
 ```
-raw_data/ACS/v2/2026070813/
+raw_data/ACS/acs_common/
 ├── usa_00042.dat.gz        # native IPUMS fixed-width microdata, gzipped
 ├── usa_00042.xml           # DDI codebook — the self-documenting variable dictionary
 ├── variables.csv           # flat codebook (var name, label, type) extracted from the DDI
 ├── parameters_used.yaml    # exact snapshot of the parameters for this pull
-└── manifest.json           # what this is: samples, variables, record count, file md5s, versions
+└── manifest.json           # what this is: run id, samples, variables, record count, file md5s
 ```
 
-This mirrors the shared-drive convention already used for CPS
-(`CPS-Monthly/<timestamp>/cps.dat.gz + cps.xml`) and keeps the `v1/`, `v2/`
-version layer used across `raw_data`.
+Named runs sit alongside any legacy `raw_data/ACS/v1/` (left untouched). The data
+files themselves mirror the format convention used for CPS
+(`CPS-Monthly/<timestamp>/cps.dat.gz + cps.xml`).
 
 **Why fixed-width `.dat.gz` + DDI, and not a CSV?** The legacy `ACS/v1/` stored a
 single **uncompressed 1.3 GB `ipums_usa.csv`**. The native gzipped fixed-width
@@ -74,16 +77,16 @@ parquet for fast repeated reads (needs the `arrow` package).
 
 `output.layout` controls how the samples are packaged on disk.
 
-**`pooled`** (default) — all `samples` go into **one** extract, one folder, one
-manifest (`.../v2/<timestamp>/`). One guaranteed-uniform schema across every
-year; the trade-off is that adding a newly-released year means re-pulling the
-whole extract.
+**`pooled`** (default) — all `samples` go into **one** extract and manifest,
+written straight into the run folder `<save_location>/<id>/`. One
+guaranteed-uniform schema across every year; the trade-off is that adding a
+newly-released year means re-pulling the whole extract.
 
-**`per_year`** — **one** extract, folder, and manifest **per sample**, with the
-folder id set to the sample id:
+**`per_year`** — **one** extract, folder, and manifest **per sample**, nested
+under the run folder as `<save_location>/<id>/<sample>/`:
 
 ```
-ACS/v2/
+ACS/acs_common/
 ├── us2015a/   usa_us2015a.dat.gz  .xml  variables.csv  parameters_used.yaml  manifest.json
 ├── us2016a/   ...
 ├── us2024a/   ...
@@ -104,11 +107,11 @@ Why you'd use it:
   batch.
 - **Optional pooled read layer.** Set `output.pooled_parquet: true` and each year
   is *also* appended (one at a time, so memory stays bounded) to a partitioned
-  parquet dataset under `.../v2/pooled/`. Read it back with partition pruning:
+  parquet dataset under `<save_location>/<id>/pooled/`. Read it back with partition pruning:
 
   ```r
   library(arrow)
-  open_dataset("…/ACS/v2/pooled") |>
+  open_dataset("…/ACS/acs_common/pooled") |>
     dplyr::filter(year == 2022) |> dplyr::select(perwt, inctot, statefip) |>
     dplyr::collect()
   ```

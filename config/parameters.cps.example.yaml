@@ -69,8 +69,8 @@ case_selections: {}
 
 output:
   save_location: /nfs/roberts/project/pi_nrs36/shared/raw_data/CPS-ASEC
-  version: v2
-  id: null
+  id: cps_asec_common   # REQUIRED; run folder is <save_location>/<id>/
+  layout: pooled        # or per_year (one folder per cpsYYYY_03s sample)
   data_prefix: cps
   keep_fixed_width: true
   write_parquet: false

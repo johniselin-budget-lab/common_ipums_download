@@ -150,6 +150,9 @@ variables:
   - SPMTHRESH
   - SPMTOTRES
   - SPMFTOTVAL
+  - SPMCAPXPNS       # SPM unit's capped work + child care expenses (in legacy v1)
+  - SPMWKXPNS        # SPM unit's work expenses (in legacy v1)
+  - SPMCHXPNS        # SPM unit's child care expenses (in legacy v1)
   - SPMPOV
   - OFFPOV
   - TAXID
@@ -203,31 +206,30 @@ case_selections: {}
 
 # ---- Output / storage -------------------------------------------------------
 output:
-  # Base directory for this dataset in the shared raw_data area. The program
-  # writes to  <save_location>/<version>/<id>/ .
+  # Base directory for this dataset in the shared raw_data area. Named runs sit
+  # directly under it, at  <save_location>/<id>/  (no version layer). Any legacy
+  # <save_location>/v1/ is left untouched alongside them.
   save_location: /nfs/roberts/project/pi_nrs36/shared/raw_data/ACS
 
-  # Version layer, matching the shared-drive convention (ACS/v1/..., CPS-ASEC/v1/...).
-  # v1 is the legacy single uncompressed ipums_usa.csv; this pipeline writes v2.
-  version: v2
+  # RUN ID — REQUIRED. Names this pull; becomes the run folder <save_location>/<id>/.
+  # Give each pull a specific, meaningful id (an empty id is a hard error). Re-running
+  # with the same id is safe: existing output is skipped unless --overwrite (and in
+  # per_year mode, only missing years are added). Use a new id for a fresh pull.
+  id: acs_common
 
   # LAYOUT — how the samples are packaged on disk:
-  #   pooled   (default) all `samples` go into ONE extract / folder / manifest.
+  #   pooled   (default) all `samples` go into ONE extract / manifest, written
+  #                      straight into the run folder <save_location>/<id>/.
   #                      Guarantees a single uniform schema across years; adding a
   #                      year means re-pulling the whole extract.
-  #   per_year           one extract / folder / manifest PER sample, with the
-  #                      folder id set to the sample id (e.g. .../v2/us2019a/).
-  #                      Each year is immutable and a re-run pulls only missing
-  #                      years, so the annual refresh is cheap. Every year is
-  #                      requested with the SAME variable list, and a schema guard
-  #                      checks that the per-year files stay uniformly stackable.
-  layout: pooled
-
-  # Subfolder name under the version, used only in `pooled` layout. null -> a UTC
-  # timestamp YYYYMMDDHH, matching the CPS-Monthly / CPS-ASEC convention (folder =
-  # when the pull was made). Set a fixed string (e.g. "2023") to pin a
-  # human-readable id. (Ignored in `per_year`, where the folder id IS the sample id.)
-  id: null
+  #   per_year           one extract / folder / manifest PER sample, nested under
+  #                      the run folder as <save_location>/<id>/<sample>/ (e.g.
+  #                      .../acs_common/us2019a/). Each year is immutable and a
+  #                      re-run (same id) pulls only missing years, so the annual
+  #                      refresh is cheap. Every year is requested with the SAME
+  #                      variable list, and a schema guard checks that the per-year
+  #                      files stay uniformly stackable.
+  layout: per_year
 
   # Filename prefix for the data + codebook files (e.g. usa_00042.dat.gz).
   data_prefix: usa
