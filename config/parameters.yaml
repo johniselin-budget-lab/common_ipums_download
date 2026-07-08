@@ -35,6 +35,19 @@ description: "Budget Lab common ACS extract (shared raw_data source)"
 # EXPWTH/EXPWTP — so pooling on PERWT works; the 2020 weights are just experimental.
 # Check availability: https://usa.ipums.org/usa-action/samples
 samples:
+  # ACS 1-year files back to 2006. Earlier years carry fewer variables (the SPM
+  # block, WKSWORK1, several income sources, etc. phase in over time); the
+  # per-sample availability pruning drops whatever a given year doesn't offer and
+  # records it in that year's manifest. The ACS 1-year series starts in 2005.
+  - us2006a
+  - us2007a
+  - us2008a
+  - us2009a
+  - us2010a
+  - us2011a
+  - us2012a
+  - us2013a
+  - us2014a
   - us2015a
   - us2016a
   - us2017a
@@ -47,7 +60,9 @@ samples:
   - us2024a
   # NOTE: us2020a is the experimental COVID-year 1-year file. For 2020, IPUMS
   # stores the experimental weights under BOTH HHWT/PERWT and EXPWTH/EXPWTP (below).
-  # Older years (back to us2006a) can be added here as needed.
+  # us2005a (the first ACS 1-year) could be added; older years carry progressively
+  # fewer variables (health insurance from 2008, SPM block from ~2009, etc.) — the
+  # per-sample availability pruning handles the gaps and logs them per year.
 
 # ---- Variables --------------------------------------------------------------
 # Plain variable names, grouped by topic. Per-variable options (data-quality
@@ -140,33 +155,58 @@ variables:
   - PROPTX99        # property taxes
 
   # --- SPM (Supplemental Poverty Measure) block -----------------------------
-  # Census/NBER-TAXSIM-derived. Useful as a shared poverty benchmark; heavy.
-  # A subset is already in the legacy shared v1 extract. Comment the whole block
-  # out if not needed.
+  # Census/NBER-TAXSIM-derived. The full block below is the union needed across
+  # downstream projects (esp. the Affordability index, which rebuilds SPM
+  # resources). Many components have limited year availability (SPM starts ~2009;
+  # some tax/credit fields later still) — the per-sample availability pruning
+  # drops what a given year lacks and logs it in that year's manifest.
+  # Unit, threshold, resources, poverty status:
   - SPMFAMUNIT
   - SPMNPERS
   - SPMNADULTS
   - SPMNCHILD
-  - SPMTHRESH
-  - SPMTOTRES
-  - SPMFTOTVAL
-  - SPMCAPXPNS       # SPM unit's capped work + child care expenses (in legacy v1)
-  - SPMWKXPNS        # SPM unit's work expenses (in legacy v1)
-  - SPMCHXPNS        # SPM unit's child care expenses (in legacy v1)
-  - SPMPOV
-  - OFFPOV
+  - SPMCOHABIT       # cohabiting-partner presence in SPM unit
+  - SPMUICHILD       # unrelated individuals <15 in SPM unit
+  - SPMEQSCALE       # SPM equivalence scale
+  - SPMGEOADJ        # SPM geographic adjustment
+  - SPMTHRESH        # SPM poverty threshold
+  - SPMTOTRES        # SPM unit resources (total)
+  - SPMFTOTVAL       # SPM unit pre-tax money income
+  - SPMPOV           # SPM poverty status
+  - OFFPOV           # official poverty status
+  # Resource add-on components (in-kind benefits):
+  - SPMSNAP          # SNAP value
+  - SPMCAPHOUS       # housing subsidy / capped rent
+  - SPMLUNCH         # school lunch value
+  - SPMHEAT          # LIHEAP / energy assistance
+  - SPMWIC           # WIC value
+  - SPMMORT          # on-mortgage flag (threshold selection)
+  # Expense components (subtracted from resources):
+  - SPMCAPXPNS       # capped work + child care expenses
+  - SPMWKXPNS        # work expenses
+  - SPMCHXPNS        # child care expenses
+  - SPMMEDXPNS       # medical out-of-pocket (SPM MOOP)
+  - MOOP             # medical out-of-pocket (person)
+  - MEDICAREB        # Medicare Part B premium
+  - SPMPREMIUM       # health insurance premiums
+  # Taxes & credits (TAXSIM-derived):
   - TAXID
   - ADJGINC
+  - SPMFEDTAXAC      # federal tax after credits
+  - SPMFEDTAXBC      # federal tax before credits
+  - SPMSTTAX         # state tax
+  - SPMEITC          # federal EITC
+  - SPMFICA          # payroll (FICA) tax
 
-  # --- Optional: within-country migration / place of work (OFF by default) --
-  # Uncomment only if a downstream project needs it (adds width for a narrow
-  # use case). MIGRATE1D / MIGPLAC1 would also go under data_quality_flags.
-  # - MIGRATE1
-  # - MIGRATE1D
-  # - MIGPLAC1
-  # - MIGCOUNTY1
-  # - PWCOUNTY
-  # - PWSTATE2
+  # --- Within-country migration / place of work -----------------------------
+  # Needed by the Multnomah county-tax model (migration flows). Availability is
+  # partial (county-level fields especially); pruning handles gaps per year.
+  - MIGRATE1
+  - MIGRATE1D        # detailed migration status (dq flag below)
+  - MIGPLAC1         # state/country of residence 1 year ago (dq flag below)
+  - MIGCOUNTY1       # county of residence 1 year ago (partial coverage)
+  - PWCOUNTY         # place-of-work county (partial coverage)
+  - PWSTATE2         # place-of-work state
 
 # ---- Data-quality flags -----------------------------------------------------
 # Variables to request WITH their IPUMS data-quality (allocation) flags, so
@@ -195,6 +235,8 @@ data_quality_flags:
   - RENT
   - VALUEH
   - PROPTX99
+  - MIGRATE1D        # migration flags requested by the Multnomah model
+  - MIGPLAC1
 
 # ---- Case selections --------------------------------------------------------
 # Restrict records by variable code, e.g. GQ: ["1","2"] to keep only

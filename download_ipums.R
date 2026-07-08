@@ -54,20 +54,33 @@ source(file.path(project_root, "R", "build_extract.R"))   # also defines %||%
 source(file.path(project_root, "R", "utils.R"))
 
 # =============================================================================
-# Availability helpers. A pooled extract lets IPUMS union variable availability
-# across samples (filling NIU where a variable is absent), but a single-sample
-# (per_year) extract HARD-REJECTS any variable not offered for that exact year
-# (e.g. EXPWTH/EXPWTP exist only in us2020a; WKSWORK1 only from 2019 on). The
-# 400 response names each offending variable, so we parse those, drop them for
-# that sample, and retry — requesting the maximal available subset per year.
+# Availability helpers. A pooled extract lets IPUMS union availability across
+# samples (filling NIU where absent), but a single-sample (per_year) extract
+# HARD-REJECTS anything not offered for that exact year. Two distinct 400s occur,
+# especially for older ACS years where variables + flags phase in over time:
+#   (a) a VARIABLE is unavailable        -> drop the variable entirely
+#       "EXPWTH: This variable is not available in any of the samples ..."
+#   (b) a variable's DATA-QUALITY FLAG is unavailable (the variable is fine)
+#       "HHINCOME has data quality flags, but none are available in the ..."
+#       -> drop only the flag, keep the variable.
+# We parse both, prune, and retry — requesting the maximal available subset per
+# year. IPUMS may reveal problems in batches, so the caller loops several times.
 # =============================================================================
 
-# Pull variable names out of an IPUMS "not available" 400 message.
+# (a) Variables IPUMS says are unavailable for the selected sample(s).
 extract_unavailable_vars <- function(msg) {
   m    <- gregexpr("([A-Za-z0-9_]+):\\s*This variable is not available", msg, perl = TRUE)
   hits <- regmatches(msg, m)[[1]]
   if (length(hits) == 0) return(character(0))
   unique(sub(":.*$", "", hits))
+}
+
+# (b) Variables whose requested data-quality flag isn't available for the sample.
+extract_unavailable_dqflags <- function(msg) {
+  m    <- gregexpr("([A-Za-z0-9_]+) has data quality flags, but none are available", msg, perl = TRUE)
+  hits <- regmatches(msg, m)[[1]]
+  if (length(hits) == 0) return(character(0))
+  unique(sub(" has data quality flags.*$", "", hits))
 }
 
 # Remove `drop` variables from a params list, keeping variables / data_quality_flags
@@ -82,6 +95,15 @@ prune_params_vars <- function(params, drop) {
   if (!is.null(params$case_selections) && length(params$case_selections) > 0) {
     params$case_selections <- params$case_selections[!toupper(names(params$case_selections)) %in% dropU]
   }
+  params
+}
+
+# Remove only the data-quality FLAG for `drop` variables (the variables stay).
+prune_params_dqflags <- function(params, drop) {
+  if (is.null(params$data_quality_flags)) return(params)
+  dropU <- toupper(drop)
+  dq    <- unlist(params$data_quality_flags, use.names = FALSE)
+  params$data_quality_flags <- as.list(dq[!toupper(as.character(dq)) %in% dropU])
   params
 }
 
@@ -114,37 +136,48 @@ pull_one <- function(params, samples, save_dir, id, run_id, overwrite) {
       length(unlist(params$variables)), " variables, ", length(samples), " samples\n", sep = "")
   cat("   Samples: ", paste(samples, collapse = ", "), "\n", sep = "")
 
-  cur_params <- params
-  dropped    <- character(0)
-  submitted  <- NULL
-  for (attempt in seq_len(6)) {
+  cur_params  <- params
+  dropped_var <- character(0)   # variables removed entirely (unavailable)
+  dropped_dq  <- character(0)   # variables kept, but their dq flag removed
+  submitted   <- NULL
+  for (attempt in seq_len(12)) {
     extract_def <- build_extract(cur_params, samples = samples)
     res <- tryCatch(submit_extract(extract_def), error = function(e) e)
     if (!inherits(res, "error")) { submitted <- res; break }
 
     msg     <- conditionMessage(res)
-    unavail <- extract_unavailable_vars(msg)
-    if (length(unavail) > 0) {
-      cat("   [", id, "] IPUMS does not offer these for this sample — dropping and retrying: ",
-          paste(unavail, collapse = ", "), "\n", sep = "")
-      dropped    <- union(dropped, unavail)
-      cur_params <- prune_params_vars(cur_params, unavail)
+    bad_var <- extract_unavailable_vars(msg)      # (a) drop variable entirely
+    bad_dq  <- extract_unavailable_dqflags(msg)   # (b) drop only the dq flag
+    if (length(bad_var) > 0 || length(bad_dq) > 0) {
+      if (length(bad_var) > 0) {
+        cat("   [", id, "] variables not available for this sample — dropping: ",
+            paste(bad_var, collapse = ", "), "\n", sep = "")
+        dropped_var <- union(dropped_var, bad_var)
+        cur_params  <- prune_params_vars(cur_params, bad_var)
+      }
+      if (length(bad_dq) > 0) {
+        cat("   [", id, "] data-quality flags not available for this sample — dropping flag, keeping var: ",
+            paste(bad_dq, collapse = ", "), "\n", sep = "")
+        dropped_dq <- union(dropped_dq, bad_dq)
+        cur_params <- prune_params_dqflags(cur_params, bad_dq)
+      }
       next
     }
-    if (grepl("sample", msg, ignore.case = TRUE)) {
-      stop("IPUMS rejected a sample (", paste(samples, collapse = ", "), ") — ",
-           "likely the newest ACS 1-year sample is not yet released.\n",
-           "  See https://usa.ipums.org/usa-action/samples and adjust `samples`.\n  ",
-           msg, call. = FALSE)
-    }
-    stop(res)
+    # Nothing parseable — a genuine error (e.g. an unreleased/invalid sample).
+    stop("IPUMS rejected the extract for sample ", paste(samples, collapse = ", "),
+         " and no droppable variable/flag was named — the sample may be unreleased ",
+         "or invalid.\n  See https://usa.ipums.org/usa-action/samples\n  ", msg, call. = FALSE)
   }
   if (is.null(submitted)) {
-    stop("Could not submit extract [", id, "] after pruning unavailable variables.", call. = FALSE)
+    stop("Could not submit extract [", id, "] after ", 12, " pruning attempts.", call. = FALSE)
   }
-  if (length(dropped) > 0) {
-    cat("   [", id, "] dropped ", length(dropped), " variable(s) not available for this sample: ",
-        paste(sort(dropped), collapse = ", "), "\n", sep = "")
+  if (length(dropped_var) > 0) {
+    cat("   [", id, "] dropped ", length(dropped_var), " unavailable variable(s): ",
+        paste(sort(dropped_var), collapse = ", "), "\n", sep = "")
+  }
+  if (length(dropped_dq) > 0) {
+    cat("   [", id, "] dropped ", length(dropped_dq), " unavailable dq flag(s) (vars kept): ",
+        paste(sort(dropped_dq), collapse = ", "), "\n", sep = "")
   }
 
   cat("   Submitted (extract ", submitted$number %||% NA, "). Waiting for IPUMS to build it ...\n", sep = "")
@@ -226,7 +259,8 @@ pull_one <- function(params, samples, save_dir, id, run_id, overwrite) {
     samples          = as.list(samples),
     n_variables      = nrow(var_info),
     variables        = as.list(var_info$var_name),
-    dropped_variables = as.list(sort(dropped)),   # requested but unavailable for this sample
+    dropped_variables = as.list(sort(dropped_var)),   # requested but unavailable for this sample
+    dropped_dq_flags  = as.list(sort(dropped_dq)),    # var kept, but its dq flag unavailable here
     data_quality_flags = as.list(unlist(params$data_quality_flags, use.names = FALSE)),
     case_selections  = params$case_selections %||% list(),
     n_records        = if (is.na(n_records)) NA else n_records,
