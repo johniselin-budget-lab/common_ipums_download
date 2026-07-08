@@ -1,0 +1,77 @@
+# =============================================================================
+# parameters.cps.example.yaml  —  template for pulling IPUMS CPS instead of ACS.
+#
+# The program (download_ipums.R) is collection-agnostic. To pull CPS someday:
+#   cp config/parameters.cps.example.yaml config/parameters.cps.yaml
+#   # edit samples / variables to taste, then:
+#   Rscript download_ipums.R config/parameters.cps.yaml
+#
+# This is a STARTER, not the vetted common CPS set — CPS sample IDs and variable
+# names differ from ACS. Confirm both before a real pull:
+#   samples:   https://cps.ipums.org/cps-action/samples
+#   variables: https://cps.ipums.org/cps-action/variables/group
+# =============================================================================
+
+collection: cps
+description: "Budget Lab common CPS extract (starter template)"
+
+# CPS ASEC sample IDs follow cpsYYYY_03s (March/ASEC). Monthly files differ.
+samples:
+  - cps2022_03s
+  - cps2023_03s
+  - cps2024_03s
+
+variables:
+  # identifiers & weights
+  - YEAR
+  - SERIAL
+  - MONTH
+  - CPSID
+  - ASECWTH
+  - PERNUM
+  - CPSIDP
+  - ASECWT
+  # geography
+  - STATEFIP
+  - COUNTY
+  # household / family structure
+  - RELATE
+  - NCHILD
+  - MARST
+  - SPLOC
+  - MOMLOC
+  - POPLOC
+  # demographics
+  - AGE
+  - SEX
+  - RACE
+  - HISPAN
+  - CITIZEN
+  - EDUC
+  # labor
+  - EMPSTAT
+  - LABFORCE
+  - CLASSWKR
+  - WKSWORK1
+  - UHRSWORKLY
+  # income
+  - INCTOT
+  - INCWAGE
+  - INCBUS
+  - FTOTVAL
+
+data_quality_flags:
+  - INCTOT
+  - INCWAGE
+  - INCBUS
+
+case_selections: {}
+
+output:
+  save_location: /nfs/roberts/project/pi_nrs36/shared/raw_data/CPS-ASEC
+  version: v2
+  id: null
+  data_prefix: cps
+  keep_fixed_width: true
+  write_parquet: false
+  count_records: true

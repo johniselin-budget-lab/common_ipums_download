@@ -1,0 +1,227 @@
+# =============================================================================
+# parameters.yaml  —  the ONE file you edit to define a common IPUMS extract.
+#
+# download_ipums.R reads this file, builds an IPUMS extract, downloads it to the
+# shared raw_data area, and writes a manifest describing what it pulled.
+#
+# The variable list below is the COMMON ACS variable set: the union of the ACS
+# variables that existing Budget Lab project extracts request from IPUMS USA,
+# organized into labeled groups. It is a *starting point* — add/remove variables
+# here, don't fork the program.
+#
+# Setup once:
+#   cp config/api_codes.example.csv config/api_codes.csv   # then paste your key
+# Then:  module load R  &&  Rscript download_ipums.R
+# =============================================================================
+
+# ---- Collection -------------------------------------------------------------
+# "usa" = IPUMS USA (ACS / decennial).  "cps" = IPUMS CPS (see
+# config/parameters.cps.example.yaml). The program is collection-agnostic: to
+# pull CPS someday, point download_ipums.R at a CPS parameter file instead.
+collection: usa
+
+# Free-text description attached to the extract on the IPUMS side and copied
+# into the manifest. Keep it identifying — it's how you'll spot the pull later.
+description: "Budget Lab common ACS extract (shared raw_data source)"
+
+# ---- Samples ----------------------------------------------------------------
+# IPUMS USA sample IDs, one per ACS 1-year file, convention usYYYYa.
+# NOTE ON AVAILABILITY: IPUMS releases each new ACS 1-year sample in early winter
+# after the survey year (us2024a ~ Dec/Jan). Requesting an unreleased sample is a
+# hard error. There is NO standard us2020a 1-year file (2020 ACS 1-year was
+# experimental) — it is intentionally omitted below.
+# Check availability: https://usa.ipums.org/usa-action/samples
+samples:
+  - us2015a
+  - us2016a
+  - us2017a
+  - us2018a
+  - us2019a
+  - us2021a
+  - us2022a
+  - us2023a
+  # - us2024a   # uncomment once released
+  # Older years (back to us2006a) can be added here as needed.
+
+# ---- Variables --------------------------------------------------------------
+# Plain variable names, grouped by topic. Per-variable options (data-quality
+# flags, case selections) are set in the two blocks AFTER this list. Trailing
+# comments describe non-obvious variables; where a comment says "(dq flag below)"
+# the variable is also listed under data_quality_flags.
+variables:
+  # --- Record identifiers & survey design weights ---------------------------
+  - YEAR
+  - SAMPLE
+  - SERIAL          # household serial
+  - CBSERIAL        # Census Bureau original household serial
+  - PERNUM
+  - HHWT            # household weight
+  - PERWT           # person weight
+  - CLUSTER         # variance-estimation cluster
+  - STRATA          # variance-estimation stratum
+  - CPI99           # CPI-U inflation adjustment factor to 1999$
+
+  # --- Geography ------------------------------------------------------------
+  - REGION
+  - STATEFIP
+  - COUNTYFIP       # only for fully-identified counties (partial coverage)
+  - PUMA
+
+  # --- Household structure & family relationships ---------------------------
+  - GQ              # group-quarters status (NOT filtered here; see case_selections)
+  - RELATE
+  - RELATED
+  - MARST
+  - NCHILD
+  - NCHLT5          # number of own children under 5
+  - YNGCH
+  - SPLOC
+  - MOMLOC
+  - POPLOC
+  - MOMLOC2
+  - POPLOC2
+
+  # --- Demographics ---------------------------------------------------------
+  - AGE
+  - SEX
+  - RACE
+  - RACED           # detailed race
+  - HISPAN
+  - HISPAND         # detailed Hispanic origin
+  - CITIZEN
+  - SCHOOL
+  - EDUC
+  - EDUCD           # detailed education
+
+  # --- Employment & labor supply --------------------------------------------
+  - LABFORCE
+  - EMPSTAT         # (dq flag below)
+  - EMPSTATD        # (dq flag below)
+  - CLASSWKR        # (dq flag below)
+  - WORKEDYR        # (dq flag below)
+  - WKSWORK1        # weeks worked last year, intervalled
+  - WKSWORK2        # weeks worked last year, intervalled (dq flag below)
+  - UHRSWORK        # usual hours worked/week (dq flag below)
+
+  # --- Income & program participation (most carry dq flags below) -----------
+  - HHINCOME        # total household income
+  - FTOTINC         # total family income
+  - INCTOT          # total personal income
+  - INCWAGE
+  - INCEARN
+  - INCBUS00
+  - INCINVST
+  - INCSS           # Social Security income
+  - INCWELFR        # welfare (public assistance) income
+  - INCSUPP         # supplemental security income
+  - INCRETIR        # retirement income
+  - INCOTHER
+  - FOODSTMP        # SNAP receipt (dq flag below)
+
+  # --- Health insurance -----------------------------------------------------
+  - HCOVANY
+  - HCOVPRIV
+  - HINSEMP
+  - HINSCAID
+  - HINSCARE
+
+  # --- Housing / tenure (dq flags below) ------------------------------------
+  - OWNERSHP
+  - RENT            # monthly contract rent
+  - VALUEH          # house value
+  - PROPTX99        # property taxes
+
+  # --- SPM (Supplemental Poverty Measure) block -----------------------------
+  # Census/NBER-TAXSIM-derived. Useful as a shared poverty benchmark; heavy.
+  # A subset is already in the legacy shared v1 extract. Comment the whole block
+  # out if not needed.
+  - SPMFAMUNIT
+  - SPMNPERS
+  - SPMNADULTS
+  - SPMNCHILD
+  - SPMTHRESH
+  - SPMTOTRES
+  - SPMFTOTVAL
+  - SPMPOV
+  - OFFPOV
+  - TAXID
+  - ADJGINC
+
+  # --- Optional: within-country migration / place of work (OFF by default) --
+  # Uncomment only if a downstream project needs it (adds width for a narrow
+  # use case). MIGRATE1D / MIGPLAC1 would also go under data_quality_flags.
+  # - MIGRATE1
+  # - MIGRATE1D
+  # - MIGPLAC1
+  # - MIGCOUNTY1
+  # - PWCOUNTY
+  # - PWSTATE2
+
+# ---- Data-quality flags -----------------------------------------------------
+# Variables to request WITH their IPUMS data-quality (allocation) flags, so
+# downstream code can screen imputed values. A name here must also appear in
+# `variables` above.
+data_quality_flags:
+  - EMPSTAT
+  - EMPSTATD
+  - CLASSWKR
+  - WORKEDYR
+  - WKSWORK2
+  - UHRSWORK
+  - HHINCOME
+  - FTOTINC
+  - INCTOT
+  - INCWAGE
+  - INCEARN
+  - INCBUS00
+  - INCINVST
+  - INCSS
+  - INCWELFR
+  - INCSUPP
+  - INCRETIR
+  - INCOTHER
+  - FOODSTMP
+  - RENT
+  - VALUEH
+  - PROPTX99
+
+# ---- Case selections --------------------------------------------------------
+# Restrict records by variable code, e.g. GQ: ["1","2"] to keep only
+# households + additional households. DELIBERATELY EMPTY: a *common* source
+# keeps every record (incl. group quarters); downstream projects filter as
+# needed. Add entries only if you want the shared file itself subset.
+#   gq: ["1", "2"]
+case_selections: {}
+
+# ---- Output / storage -------------------------------------------------------
+output:
+  # Base directory for this dataset in the shared raw_data area. The program
+  # writes to  <save_location>/<version>/<id>/ .
+  save_location: /nfs/roberts/project/pi_nrs36/shared/raw_data/ACS
+
+  # Version layer, matching the shared-drive convention (ACS/v1/..., CPS-ASEC/v1/...).
+  # v1 is the legacy single uncompressed ipums_usa.csv; this pipeline writes v2.
+  version: v2
+
+  # Subfolder name under the version. null -> a UTC timestamp YYYYMMDDHH, matching
+  # the CPS-Monthly / CPS-ASEC convention (folder = when the pull was made).
+  # Set a fixed string (e.g. "2023") to pin a human-readable id.
+  id: null
+
+  # Filename prefix for the data + codebook files (e.g. usa_00042.dat.gz).
+  data_prefix: usa
+
+  # STORAGE FORMAT.
+  # keep_fixed_width: keep IPUMS's native gzipped fixed-width .dat.gz + DDI .xml.
+  #   This is the recommended default: it is the most compact on-disk form AND
+  #   the DDI .xml is a complete, self-documenting codebook (labels, formats,
+  #   value labels). It is a big space win over the legacy v1 uncompressed CSV
+  #   (~1.3 GB -> a fraction of that gzipped).
+  keep_fixed_width: true
+  # write_parquet: additionally write a columnar parquet for fast downstream
+  #   reads (needs the `arrow` R package). Off by default to avoid the dep and
+  #   the extra disk. Turn on if analysts will read this repeatedly in R/Python.
+  write_parquet: false
+  # count_records: count data rows for the manifest (streams the .dat.gz; adds a
+  #   little time on large pulls). Set false to skip.
+  count_records: true

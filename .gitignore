@@ -1,0 +1,27 @@
+# Secrets — keep the .example template tracked, never the real key
+config/api_codes.csv
+
+# The downloads themselves live in the shared raw_data area, never in the repo.
+# Ignore any local staging just in case.
+data/
+*.dat
+*.dat.gz
+*.parquet
+
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# Logs
+logs/*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Local Claude Code notes (not committed)
+CLAUDE.md
