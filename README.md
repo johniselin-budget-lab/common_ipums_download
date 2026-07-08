@@ -70,6 +70,57 @@ self-documenting. Both `ipumsr::read_ipums_micro()` (R) and standard tooling rea
 it directly. Set `output.write_parquet: true` to *additionally* emit a columnar
 parquet for fast repeated reads (needs the `arrow` package).
 
+## Layout: pooled (default) vs. per-year
+
+`output.layout` controls how the samples are packaged on disk.
+
+**`pooled`** (default) — all `samples` go into **one** extract, one folder, one
+manifest (`.../v2/<timestamp>/`). One guaranteed-uniform schema across every
+year; the trade-off is that adding a newly-released year means re-pulling the
+whole extract.
+
+**`per_year`** — **one** extract, folder, and manifest **per sample**, with the
+folder id set to the sample id:
+
+```
+ACS/v2/
+├── us2015a/   usa_us2015a.dat.gz  .xml  variables.csv  parameters_used.yaml  manifest.json
+├── us2016a/   ...
+├── us2024a/   ...
+└── pooled/                      # only if output.pooled_parquet: true
+    ├── year=2015/part-0.parquet
+    ├── year=2016/part-0.parquet
+    └── ...
+```
+
+Why you'd use it:
+
+- **Cheap annual refresh.** Each year folder is immutable; a re-run skips folders
+  that already hold a DDI and pulls only the missing year(s) — so December's
+  refresh downloads one ~140 MB file instead of rebuilding the whole ~1.4 GB
+  extract. (`--overwrite` forces a re-pull.)
+- **Immutable, pinnable artifacts** — one md5-stable folder per year.
+- **Failure isolation** — a rejected sample or hung build costs one year, not the
+  batch.
+- **Optional pooled read layer.** Set `output.pooled_parquet: true` and each year
+  is *also* appended (one at a time, so memory stays bounded) to a partitioned
+  parquet dataset under `.../v2/pooled/`. Read it back with partition pruning:
+
+  ```r
+  library(arrow)
+  open_dataset("…/ACS/v2/pooled") |>
+    dplyr::filter(year == 2022) |> dplyr::select(perwt, inctot, statefip) |>
+    dplyr::collect()
+  ```
+
+**The guard.** The per-year files are only stackable if every year carries the
+*same* variable set, so the pipeline always requests the identical `variables`
+list for each year and, after a `per_year` run, verifies that every year folder's
+returned variables match — warning loudly (never deleting) on any drift. The
+pooled-parquet append applies the same check per year and refuses to append a
+year whose schema doesn't match the existing dataset. If you see a drift warning,
+re-pull the affected years with one consistent variable list (`--overwrite`).
+
 ## The common variable set
 
 `config/parameters.yaml` ships with the **union** of the ACS variables requested
@@ -85,7 +136,12 @@ Design choices for a *common* source (documented inline in the file):
   downstream projects filter as needed.
 - **Data-quality flags on** for income/housing/employment, so downstream code can
   screen allocated (imputed) values.
-- **`us2020a` omitted** — there is no standard ACS 2020 1-year file.
+- **`us2020a` included, with a caveat** — this is the *experimental* 2020 ACS
+  1-year file (the standard 2020 1-year release was cancelled due to COVID).
+  IPUMS puts the COVID-adjusted experimental weights in **both** places: under the
+  standard names `HHWT`/`PERWT` *and* under `EXPWTH`/`EXPWTP`. So pooling years and
+  weighting on `PERWT` works fine — just know that 2020's weights are experimental,
+  and `EXPWTH`/`EXPWTP` are carried as an explicit, self-documenting copy.
 - A **migration/place-of-work block** is included but commented out
   (single-project; adds width for a narrow use case).
 

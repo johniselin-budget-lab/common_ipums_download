@@ -13,11 +13,15 @@ suppressPackageStartupMessages({
 #' Build an IPUMS micro extract definition from a parsed parameters list
 #'
 #' @param params The list returned by yaml::read_yaml("config/parameters.yaml")
+#' @param samples Optional character vector of sample IDs to request instead of
+#'   params$samples. Used by the per-year layout to pull one sample at a time
+#'   while keeping the SAME variable list, so every year's file stays uniformly
+#'   stackable. NULL (default) uses params$samples.
 #' @return An ipumsr extract definition (unsubmitted)
-build_extract <- function(params) {
+build_extract <- function(params, samples = NULL) {
 
   collection <- params$collection %||% "usa"
-  samples    <- unlist(params$samples, use.names = FALSE)
+  samples    <- samples %||% unlist(params$samples, use.names = FALSE)
   var_names  <- unlist(params$variables, use.names = FALSE)
 
   if (length(samples) == 0)   stop("No `samples` listed in parameters.yaml", call. = FALSE)

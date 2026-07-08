@@ -28,8 +28,11 @@ description: "Budget Lab common ACS extract (shared raw_data source)"
 # IPUMS USA sample IDs, one per ACS 1-year file, convention usYYYYa.
 # NOTE ON AVAILABILITY: IPUMS releases each new ACS 1-year sample in early winter
 # after the survey year (us2024a ~ Dec/Jan). Requesting an unreleased sample is a
-# hard error. There is NO standard us2020a 1-year file (2020 ACS 1-year was
-# experimental) — it is intentionally omitted below.
+# hard error. us2020a is the EXPERIMENTAL 2020 ACS 1-year file (the standard 2020
+# 1-year release was cancelled due to COVID data-collection disruptions); it is
+# included below. For 2020, IPUMS supplies the experimental (COVID-adjusted)
+# weights under BOTH the standard names HHWT/PERWT and the experimental names
+# EXPWTH/EXPWTP — so pooling on PERWT works; the 2020 weights are just experimental.
 # Check availability: https://usa.ipums.org/usa-action/samples
 samples:
   - us2015a
@@ -37,10 +40,13 @@ samples:
   - us2017a
   - us2018a
   - us2019a
+  - us2020a
   - us2021a
   - us2022a
   - us2023a
-  # - us2024a   # uncomment once released
+  - us2024a
+  # NOTE: us2020a is the experimental COVID-year 1-year file. For 2020, IPUMS
+  # stores the experimental weights under BOTH HHWT/PERWT and EXPWTH/EXPWTP (below).
   # Older years (back to us2006a) can be added here as needed.
 
 # ---- Variables --------------------------------------------------------------
@@ -57,6 +63,8 @@ variables:
   - PERNUM
   - HHWT            # household weight
   - PERWT           # person weight
+  - EXPWTH          # experimental household weight (2020 ACS experimental sample)
+  - EXPWTP          # experimental person weight (2020 ACS experimental sample)
   - CLUSTER         # variance-estimation cluster
   - STRATA          # variance-estimation stratum
   - CPI99           # CPI-U inflation adjustment factor to 1999$
@@ -203,9 +211,22 @@ output:
   # v1 is the legacy single uncompressed ipums_usa.csv; this pipeline writes v2.
   version: v2
 
-  # Subfolder name under the version. null -> a UTC timestamp YYYYMMDDHH, matching
-  # the CPS-Monthly / CPS-ASEC convention (folder = when the pull was made).
-  # Set a fixed string (e.g. "2023") to pin a human-readable id.
+  # LAYOUT — how the samples are packaged on disk:
+  #   pooled   (default) all `samples` go into ONE extract / folder / manifest.
+  #                      Guarantees a single uniform schema across years; adding a
+  #                      year means re-pulling the whole extract.
+  #   per_year           one extract / folder / manifest PER sample, with the
+  #                      folder id set to the sample id (e.g. .../v2/us2019a/).
+  #                      Each year is immutable and a re-run pulls only missing
+  #                      years, so the annual refresh is cheap. Every year is
+  #                      requested with the SAME variable list, and a schema guard
+  #                      checks that the per-year files stay uniformly stackable.
+  layout: pooled
+
+  # Subfolder name under the version, used only in `pooled` layout. null -> a UTC
+  # timestamp YYYYMMDDHH, matching the CPS-Monthly / CPS-ASEC convention (folder =
+  # when the pull was made). Set a fixed string (e.g. "2023") to pin a
+  # human-readable id. (Ignored in `per_year`, where the folder id IS the sample id.)
   id: null
 
   # Filename prefix for the data + codebook files (e.g. usa_00042.dat.gz).
@@ -218,10 +239,17 @@ output:
   #   value labels). It is a big space win over the legacy v1 uncompressed CSV
   #   (~1.3 GB -> a fraction of that gzipped).
   keep_fixed_width: true
-  # write_parquet: additionally write a columnar parquet for fast downstream
-  #   reads (needs the `arrow` R package). Off by default to avoid the dep and
-  #   the extra disk. Turn on if analysts will read this repeatedly in R/Python.
+  # write_parquet: additionally write a columnar parquet PER folder for fast
+  #   downstream reads (needs the `arrow` R package). Off by default to avoid the
+  #   dep and the extra disk. Turn on if analysts will read this repeatedly.
   write_parquet: false
+  # pooled_parquet: per_year layout ONLY. Additionally append each year into a
+  #   single partitioned parquet dataset at <version>/pooled/ (year=YYYY/...), a
+  #   derived convenience layer for cross-year (panel) reads with partition
+  #   pruning. Appended one year at a time so memory stays bounded; needs `arrow`.
+  #   Read it back with arrow::open_dataset(".../v2/pooled"). Ignored when
+  #   layout is pooled.
+  pooled_parquet: false
   # count_records: count data rows for the manifest (streams the .dat.gz; adds a
   #   little time on large pulls). Set false to skip.
   count_records: true
