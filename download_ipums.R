@@ -31,6 +31,12 @@
 # holds a DDI is left untouched. Re-running with the SAME id in per_year mode adds
 # only the missing years; a fresh pull just needs a new id.
 #
+# FILE NAMING: downloaded files are renamed from IPUMS's extract-numbered names
+# (usa_00053.dat.gz) to a stable stem — <data_prefix>_<YYYYa> per year (e.g.
+# usa_2020a.dat.gz/.xml) or <data_prefix>_<id> pooled. The IPUMS extract number
+# is kept in the manifest. A re-pull first clears the folder's prior data/codebook
+# so a superseded extract can never linger as a second vintage.
+#
 # Requires an IPUMS API key in config/api_codes.csv (see api_codes.example.csv).
 # =============================================================================
 
@@ -113,7 +119,7 @@ prune_params_dqflags <- function(params, drop) {
 #   it once per sample. `param_path` (the parameter file to snapshot) is a
 #   script-level constant set by the driver below.
 # =============================================================================
-pull_one <- function(params, samples, save_dir, id, run_id, overwrite) {
+pull_one <- function(params, samples, save_dir, id, run_id, file_stem, overwrite) {
   out              <- params$output %||% list()
   save_location    <- out$save_location
   data_prefix      <- out$data_prefix %||% "usa"
@@ -130,6 +136,17 @@ pull_one <- function(params, samples, save_dir, id, run_id, overwrite) {
     return(invisible(NULL))
   }
   dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+
+  # On a (re-)pull, clear any prior microdata/codebook so a superseded IPUMS
+  # extract can never linger as a second vintage. Files are given a stable name
+  # (file_stem) below, keyed to the sample/run rather than the IPUMS extract
+  # number — the extract number lives in the manifest instead. (parameters_used /
+  # manifest / variables.csv are regenerated after download, so leave them.)
+  stale <- list.files(save_dir, pattern = "\\.(dat\\.gz|dat|xml)$", full.names = TRUE)
+  if (length(stale) > 0) {
+    cat("   [", id, "] clearing ", length(stale), " prior data/codebook file(s) before re-pull.\n", sep = "")
+    file.remove(stale)
+  }
 
   # ---- Build + submit, pruning variables IPUMS doesn't offer for this sample -
   cat(">> Submitting ", params$collection %||% "usa", " extract [", id, "]: ",
@@ -184,14 +201,29 @@ pull_one <- function(params, samples, save_dir, id, run_id, overwrite) {
   ready <- wait_for_extract_retry(submitted)
 
   cat(">> Downloading into ", save_dir, " ...\n", sep = "")
-  ddi_path <- download_extract(ready, download_dir = save_dir, overwrite = TRUE)
-  ddi_path <- normalizePath(ddi_path, winslash = "/")
-  cat("   DDI:", basename(ddi_path), "\n")
+  ddi_raw  <- download_extract(ready, download_dir = save_dir, overwrite = TRUE)
+  ddi_raw  <- normalizePath(ddi_raw, winslash = "/")
+
+  # IPUMS names its files after the extract number (usa_00053.dat.gz / .xml).
+  # Rename to a stable, human-readable stem (e.g. usa_2020a) so each year folder
+  # holds one predictably-named vintage; the IPUMS extract number is recorded in
+  # the manifest. The DDI's internal <fileName> points at the .dat, so patch that
+  # reference too, or read_ipums_micro(ddi) would look for the old filename.
+  ipums_stem <- sub("\\.xml$", "", basename(ddi_raw))          # e.g. "usa_00053"
+  dat_raw    <- file.path(dirname(ddi_raw), paste0(ipums_stem, ".dat.gz"))
+  dat_path   <- file.path(save_dir, paste0(file_stem, ".dat.gz"))
+  ddi_path   <- file.path(save_dir, paste0(file_stem, ".xml"))
+  if (file.exists(dat_raw)) file.rename(dat_raw, dat_path)
+  file.rename(ddi_raw, ddi_path)
+  xml_txt <- readLines(ddi_path, warn = FALSE)
+  xml_txt <- gsub(paste0(ipums_stem, ".dat"), paste0(file_stem, ".dat"), xml_txt, fixed = TRUE)
+  writeLines(xml_txt, ddi_path)
+  cat("   Files: ", file_stem, ".dat.gz + ", file_stem, ".xml  (IPUMS extract #",
+      submitted$number %||% NA, ")\n", sep = "")
 
   # ---- Read the DDI for metadata + the record count -------------------------
   ddi      <- read_ipums_ddi(ddi_path)
   var_info <- ipums_var_info(ddi)
-  dat_path <- list.files(save_dir, pattern = "\\.dat(\\.gz)?$", full.names = TRUE)[1]
 
   n_records <- NA_integer_
   if (count_records && !is.na(dat_path)) {
@@ -207,7 +239,7 @@ pull_one <- function(params, samples, save_dir, id, run_id, overwrite) {
       cat(">> Reading microdata to write parquet ...\n")
       micro <- read_ipums_micro(ddi, verbose = FALSE)
       names(micro) <- tolower(names(micro))
-      parquet_path <- file.path(save_dir, paste0(data_prefix, "_", id, ".parquet"))
+      parquet_path <- file.path(save_dir, paste0(file_stem, ".parquet"))
       arrow::write_parquet(micro, parquet_path)
       cat("   Parquet:", basename(parquet_path), "\n")
       rm(micro); gc()
@@ -255,7 +287,9 @@ pull_one <- function(params, samples, save_dir, id, run_id, overwrite) {
     save_dir         = save_dir,
     created_utc      = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
     created_by       = Sys.getenv("USER", unset = NA),
-    ipums_extract_number = submitted$number %||% NA,
+    ipums_extract_number = submitted$number %||% NA,   # IPUMS submission # (files are named by file_stem, not this)
+    data_file        = paste0(file_stem, ".dat.gz"),
+    ddi_file         = paste0(file_stem, ".xml"),
     samples          = as.list(samples),
     n_variables      = nrow(var_info),
     variables        = as.list(var_info$var_name),
@@ -402,6 +436,15 @@ out            <- params$output %||% list()
 save_location  <- out$save_location %||% stop("output.save_location missing in parameters", call. = FALSE)
 layout         <- out$layout %||% "pooled"
 pooled_parquet <- isTRUE(out$pooled_parquet %||% FALSE)
+data_prefix    <- out$data_prefix %||% "usa"
+
+# Stable file stem for a pull's data/codebook files. Per-year: <prefix>_<YYYYa>
+# (strip the collection letters off the sample id, e.g. us2020a -> usa_2020a).
+# Pooled: <prefix>_<run_id>. The IPUMS extract number is kept in the manifest.
+file_stem_for <- function(sample_or_id, per_year) {
+  token <- if (per_year) sub("^[a-z]+", "", sample_or_id) else sample_or_id
+  paste0(data_prefix, "_", token)
+}
 
 run_id <- out$id
 if (is.null(run_id) || !nzchar(trimws(as.character(run_id)))) {
@@ -436,7 +479,8 @@ if (identical(layout, "per_year")) {
   n_pulled <- 0L
   for (s in samples) {
     save_dir <- file.path(run_dir, s)   # <save_location>/<id>/<sample>/
-    m <- pull_one(params, samples = s, save_dir = save_dir, id = s, run_id = run_id, overwrite = overwrite)
+    m <- pull_one(params, samples = s, save_dir = save_dir, id = s, run_id = run_id,
+                  file_stem = file_stem_for(s, per_year = TRUE), overwrite = overwrite)
     if (!is.null(m)) {
       n_pulled <- n_pulled + 1L
       if (pooled_parquet) append_year_to_pooled(m, pooled_dir)
@@ -454,7 +498,8 @@ if (identical(layout, "per_year")) {
 } else {   # pooled — all samples in one extract under the run folder
   cat(">> Layout: pooled  (all ", length(samples), " samples in one extract)\n\n", sep = "")
 
-  m <- pull_one(params, samples = samples, save_dir = run_dir, id = run_id, run_id = run_id, overwrite = overwrite)
+  m <- pull_one(params, samples = samples, save_dir = run_dir, id = run_id, run_id = run_id,
+                file_stem = file_stem_for(run_id, per_year = FALSE), overwrite = overwrite)
 
   cat("\n=== Complete:", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"), "===\n")
   if (is.null(m)) {

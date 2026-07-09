@@ -273,7 +273,10 @@ output:
   #                      files stay uniformly stackable.
   layout: per_year
 
-  # Filename prefix for the data + codebook files (e.g. usa_00042.dat.gz).
+  # Filename prefix for the data + codebook files. Files are named
+  # <data_prefix>_<sample-year> in per_year mode (e.g. usa_2020a.dat.gz / .xml)
+  # and <data_prefix>_<id> in pooled mode. The IPUMS extract/submission number is
+  # NOT in the filename — it is recorded in each manifest.json (ipums_extract_number).
   data_prefix: usa
 
   # STORAGE FORMAT.
