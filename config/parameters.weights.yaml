@@ -1,0 +1,99 @@
+# =============================================================================
+# parameters.weights.yaml  —  the ACS REPLICATE-WEIGHTS layer.
+#
+# A companion pull to parameters.yaml. It fetches ONLY the record-linking keys
+# plus the two replicate-weight blocks (REPWT = 80 household weights, REPWTP = 80
+# person weights) for the SAME samples as the main common extract. The result is
+# a parallel folder tree you MERGE onto the main acs_common files on demand —
+# so the lean common file stays lean (~0.5 GB/yr) and the ~160-column weight
+# matrix is a separate, opt-in artifact loaded only when you need design-based
+# standard errors (e.g. variance after raking/reweighting).
+#
+# Run it exactly like the main pull, just pointing at this file:
+#   module load R
+#   Rscript download_ipums.R config/parameters.weights.yaml
+#
+# WHY A SEPARATE LAYER (not REPWT/REPWTP added to parameters.yaml)?
+#   Adding the 160 replicate-weight columns to the common extract ~4x's it for
+#   EVERY downstream Budget Lab repo, most of which only need point estimates.
+#   Replicate weights are needed at one place (variance estimation), so they live
+#   in their own layer that merges back losslessly on the IPUMS record keys.
+#
+# HOW THE MERGE IS LOSSLESS:
+#   An IPUMS extract is deterministic given (collection, samples, no case
+#   selection): every record in a sample is returned, uniquely keyed by
+#   SAMPLE + SERIAL (household) and SAMPLE + SERIAL + PERNUM (person). This file
+#   requests the SAME samples with NO case selection, so its row universe aligns
+#   1:1 with acs_common. Join person-level vars (REPWTP) on SAMPLE+SERIAL+PERNUM;
+#   household-level (REPWT, constant within a household) on SAMPLE+SERIAL.
+#   HHWT/PERWT are carried here purely as a merge checksum — they must match the
+#   main file row-for-row; if they don't, the universes drifted (someone changed
+#   samples or added a case selection on one side) and you must re-pull to realign.
+# =============================================================================
+
+collection: usa
+description: "Budget Lab common ACS replicate-weights layer (merge onto acs_common by SAMPLE+SERIAL[+PERNUM])"
+
+# ---- Samples ----------------------------------------------------------------
+# Every ID here MUST also appear in parameters.yaml (you merge weights onto the
+# matching acs_common/<sample>/ file, so the main extract must carry that year).
+# It may be a SUBSET — the weights layer only needs the years you'll actually
+# compute SEs for. Sample IDs and their (no) case selection must match the main
+# pull so the row universes align 1:1. Replicate weights are available for ACS
+# 1-year samples from 2005 on and for the multiyear (5-year) files; the pipeline's
+# per-sample availability pruning drops+logs any year that doesn't offer them.
+samples:
+  # Scoped to the years that actually need design-based SEs today (the
+  # Affordability-Index frame): the 2022-24 1-year files + the most recent
+  # 5-year file. This is a SUBSET of parameters.yaml's samples — that's fine
+  # (the weights layer only has to cover the years you merge onto); just don't
+  # request a weights year that isn't in the main extract. Add more 1-year IDs
+  # here if another project needs SEs for earlier years.
+  - us2022a
+  - us2023a
+  - us2024a
+  # 5-year file (2020-2024); replicate weights matter most here (multiyear SEs).
+  - us2024c
+
+# ---- Variables --------------------------------------------------------------
+# Linking keys + the two replicate-weight blocks. Nothing else — this is a join
+# table, not an analytic file.
+variables:
+  # --- Record-linking keys (must match the keys carried in parameters.yaml) --
+  - YEAR
+  - SAMPLE          # distinguishes years within a pooled read; part of the join key
+  - SERIAL          # household serial (unique within a sample)
+  - CBSERIAL        # Census Bureau original household serial (carried for parity)
+  - PERNUM          # person within household -> SAMPLE+SERIAL+PERNUM is the person key
+
+  # --- Merge checksum (also present in acs_common; must match row-for-row) ----
+  - HHWT            # household weight
+  - PERWT           # person weight
+
+  # --- Replicate weights (the payload) ---------------------------------------
+  - REPWT           # 80 household replicate weights (REPWT1..REPWT80)
+  - REPWTP          # 80 person replicate weights   (REPWTP1..REPWTP80)
+
+# No data-quality flags and NO case selection — a case selection here would
+# desync the row universe from acs_common and break the merge.
+data_quality_flags: []
+case_selections: {}
+
+# ---- Output -----------------------------------------------------------------
+output:
+  # Same dataset root as the main pull; a sibling run folder alongside acs_common:
+  #   ACS/acs_common/        <- main lean extract (parameters.yaml)
+  #   ACS/acs_common_repwt/  <- this weights layer, same per-year structure
+  save_location: /nfs/roberts/project/pi_nrs36/shared/raw_data/ACS
+  id: acs_common_repwt
+  # per_year mirrors the main layout: one folder per sample -> merge each year's
+  # weights onto the matching acs_common/<sample>/ file. A re-run with this id
+  # pulls only missing years (cheap annual refresh), same as the main layer.
+  layout: per_year
+  data_prefix: usa
+  keep_fixed_width: true
+  write_parquet: false
+  # No pooled parquet: the weights are meant to be joined onto acs_common, not
+  # read standalone. (The main layer's pooled/ is where cross-year reads live.)
+  pooled_parquet: false
+  count_records: true

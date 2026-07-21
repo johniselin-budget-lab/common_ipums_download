@@ -151,11 +151,57 @@ Design choices for a *common* source (documented inline in the file):
 To change what's pulled, edit `variables` / `samples` / `data_quality_flags` in
 `parameters.yaml` and re-run. Adding a variable does not require touching any R.
 
+## Replicate weights: a separate merge-on layer
+
+The common extract deliberately carries **only the point-estimate weights**
+(`HHWT`/`PERWT`). The ACS **replicate weights** — `REPWT` (80 household columns)
+and `REPWTP` (80 person columns), needed for design-based standard errors — live
+in a **separate companion pull**, `config/parameters.weights.yaml`, and are
+**merged onto the main file on demand**:
+
+```bash
+Rscript download_ipums.R config/parameters.weights.yaml
+```
+
+It writes a sibling run folder with the *same* per-year structure:
+
+```
+ACS/acs_common/        # main lean extract (parameters.yaml)
+ACS/acs_common_repwt/  # replicate-weights layer, same us<YYYY> subfolders
+```
+
+**Why separate, not baked into `parameters.yaml`.** The 160 replicate-weight
+columns roughly **4×** the extract (measured elsewhere: ~0.5 GB → ~2.2 GB for a
+3-year pull). Only variance estimation needs them, so folding them into the
+common file would tax *every* downstream repo — most of which only want point
+estimates — on every read. Keeping them in an opt-in layer leaves the common
+file lean and makes the weight matrix a load-only-when-needed artifact.
+
+**Why the merge is lossless.** An IPUMS extract is deterministic given
+`(collection, samples, no case selection)`: every record in a sample is returned,
+uniquely keyed by `SAMPLE + SERIAL` (household) and `SAMPLE + SERIAL + PERNUM`
+(person). `parameters.weights.yaml` requests the **same samples with no case
+selection**, so its rows align 1:1 with `acs_common`. Join person-level `REPWTP`
+on `SAMPLE + SERIAL + PERNUM`; household-level `REPWT` (constant within a
+household) on `SAMPLE + SERIAL`. `HHWT`/`PERWT` are carried in both files as a
+**merge checksum** — they must match row-for-row; a mismatch means the two
+layers' universes drifted (someone changed `samples` or added a case selection on
+one side) and both must be re-pulled to realign. Do the join lazily/per-year
+(arrow/parquet), not eagerly — 160 columns × ~10M rows is large.
+
+> **The weights `samples` must be a subset of the main pull.** The layer ships
+> scoped to the years that need design-based SEs today — the `us2022a`/`us2023a`/
+> `us2024a` 1-year files plus the most recent 5-year file (`us2024c`) — not all of
+> `acs_common`. Every ID in `parameters.weights.yaml` must also be in
+> `parameters.yaml` (you merge onto the matching year), but it need not cover
+> every year. Add IDs here if another project needs SEs for earlier years.
+
 ## Files
 
 | Path | Purpose |
 |------|---------|
 | `config/parameters.yaml` | The parameter file (default: common ACS). Edit this. |
+| `config/parameters.weights.yaml` | Replicate-weights layer (`REPWT`/`REPWTP`), merged onto `acs_common`. |
 | `config/parameters.cps.example.yaml` | Starter template for a CPS pull. |
 | `config/api_codes.example.csv` | Template for your IPUMS key (copy to `api_codes.csv`). |
 | `download_ipums.R` | The program: extract → download → manifest. |

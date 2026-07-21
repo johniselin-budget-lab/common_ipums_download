@@ -63,6 +63,14 @@ samples:
   # us2005a (the first ACS 1-year) could be added; older years carry progressively
   # fewer variables (health insurance from 2008, SPM block from ~2009, etc.) — the
   # per-sample availability pruning handles the gaps and logs them per year.
+  #
+  # ACS 5-YEAR file (convention usYYYYc, ending year in the ID). Most recent
+  # release: us2024c = the 2020-2024 ACS 5-year. Note this overlaps the 1-year
+  # files above (2020-2024), so DO NOT pool it with the 1-year samples for
+  # weighted totals — you would double-count those person-years. It lives in its
+  # own per_year folder (us2024c/) and is meant to be read on its own for
+  # small-geography (e.g. PUMA/county) estimates.
+  - us2024c
 
 # ---- Variables --------------------------------------------------------------
 # Plain variable names, grouped by topic. Per-variable options (data-quality
