@@ -68,7 +68,13 @@ source(file.path(project_root, "R", "utils.R"))
 #       "EXPWTH: This variable is not available in any of the samples ..."
 #   (b) a variable's DATA-QUALITY FLAG is unavailable (the variable is fine)
 #       "HHINCOME has data quality flags, but none are available in the ..."
+#       "INCTOT does not have any data quality flags"   <- CPS phrasing
 #       -> drop only the flag, keep the variable.
+#       The second phrasing appears when a variable has NO flags in the
+#       collection at all (common in CPS, where flags attach to the component
+#       variables -- OINCWAGE, OINCBUS, INCLONGJ -- rather than the aggregates
+#       INCTOT / INCWAGE / INCBUS). Added 2026-08-19 after it hard-failed the
+#       first CPS ASEC pull.
 # We parse both, prune, and retry — requesting the maximal available subset per
 # year. IPUMS may reveal problems in batches, so the caller loops several times.
 # =============================================================================
@@ -83,10 +89,13 @@ extract_unavailable_vars <- function(msg) {
 
 # (b) Variables whose requested data-quality flag isn't available for the sample.
 extract_unavailable_dqflags <- function(msg) {
-  m    <- gregexpr("([A-Za-z0-9_]+) has data quality flags, but none are available", msg, perl = TRUE)
-  hits <- regmatches(msg, m)[[1]]
+  pats <- c("([A-Za-z0-9_]+) has data quality flags, but none are available",
+            "([A-Za-z0-9_]+) does not have any data quality flags")
+  hits <- unlist(lapply(pats, function(p) {
+    regmatches(msg, gregexpr(p, msg, perl = TRUE))[[1]]
+  }))
   if (length(hits) == 0) return(character(0))
-  unique(sub(" has data quality flags.*$", "", hits))
+  unique(sub(" (has|does not have) .*$", "", hits))
 }
 
 # Remove `drop` variables from a params list, keeping variables / data_quality_flags

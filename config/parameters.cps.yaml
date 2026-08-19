@@ -1,0 +1,187 @@
+# =============================================================================
+# parameters.cps.yaml — Budget Lab common CPS ASEC extract
+#
+# Added 2026-08-19 for the Tax-Simulator non-filer residual workstream
+# (other/state_tax_research/nonfiler_residual_design.md §3.2, §4.1): the filing
+# model is estimated on the CPS ASEC and transferred to the ACS, so the ASEC is
+# the models' native environment (both Cilke 1998 and Mok 2017 estimated there).
+#
+# Per the design memo's rule, this is a COMMON extract in the shared store, not
+# a project-local pull — Affordability-Index and the state-data imputation plan
+# (state_data_imputation_plan.md, 2026-08-18 note) consume the same file. Add
+# variables here rather than forking a new extract.
+#
+#   Rscript download_ipums.R config/parameters.cps.yaml
+#
+# Every sample and variable below was validated against the IPUMS API on
+# 2026-08-19: all 71 variables are available in all 11 samples.
+# =============================================================================
+
+collection: cps
+description: "Budget Lab common CPS ASEC extract (filing model, tax units, income detail)"
+
+# -----------------------------------------------------------------------------
+# Samples. ASEC year Y asks about income in calendar year Y-1, so the sample IDs
+# below cover INCOME YEARS 2014-2024 — deliberately, not incidentally:
+#   cps2018_03s -> TY2017   } the two residual-anchor years
+#   cps2023_03s -> TY2022   }
+#   cps2015_03s, cps2017_03s..cps2020_03s -> TY2014, TY2016-2019, the back years
+#                            design memo §8 needs once back-year weights are fit
+# cps2025_03s (TY2024) is the latest released; ASEC 2026 lands ~Sept 2026.
+# -----------------------------------------------------------------------------
+samples:
+  - cps2015_03s   # TY2014
+  - cps2016_03s   # TY2015
+  - cps2017_03s   # TY2016
+  - cps2018_03s   # TY2017  <- anchor year
+  - cps2019_03s   # TY2018
+  - cps2020_03s   # TY2019
+  - cps2021_03s   # TY2020
+  - cps2022_03s   # TY2021
+  - cps2023_03s   # TY2022  <- anchor year
+  - cps2024_03s   # TY2023
+  - cps2025_03s   # TY2024
+
+variables:
+  # --- identifiers and weights -------------------------------------------------
+  - YEAR
+  - SERIAL
+  - MONTH
+  - CPSID
+  - CPSIDP
+  - ASECFLAG
+  - ASECWTH
+  - ASECWT
+  - PERNUM
+
+  # --- geography ---------------------------------------------------------------
+  - STATEFIP
+  - COUNTY
+
+  # --- universe ----------------------------------------------------------------
+  # GQ matters here: Mok's CPS frame EXCLUDES the institutionalized and
+  # military-barracks populations, but the PUF universe INCLUDES group quarters
+  # (design memo §3.0). Carrying GQ is what lets those records be scored under a
+  # stated assumption and reported separately, rather than silently swept in.
+  - GQ
+
+  # --- household / family / tax-unit structure ---------------------------------
+  - RELATE
+  - FAMUNIT
+  - FAMSIZE
+  - NCHILD
+  - NCHLT5
+  - ELDCH
+  - YNGCH
+  - MARST
+  - SPLOC
+  - MOMLOC
+  - POPLOC
+
+  # --- demographics (Mok covariates: education, race, ethnicity) ---------------
+  - AGE
+  - SEX
+  - RACE
+  - HISPAN
+  - CITIZEN
+  - EDUC
+  - DISABWRK
+
+  # --- labor -------------------------------------------------------------------
+  - EMPSTAT
+  - LABFORCE
+  - CLASSWKR
+  - WKSWORK1
+  - UHRSWORKLY
+  - WORKLY
+  - SRCEARN
+
+  # --- income components -------------------------------------------------------
+  # Mok's probits use PRESENCE indicators for wages / interest / dividends /
+  # self-employment / rent / retirement / Social Security, plus log gross income
+  # and a negative-income indicator. All of those are built from this block.
+  - INCTOT
+  - INCWAGE
+  - OINCWAGE
+  - INCLONGJ
+  - INCBUS
+  - INCFARM
+  - INCSS
+  - INCSSI
+  - INCWELFR
+  - INCRETIR
+  - INCINT
+  - INCDIVID
+  - INCRENT
+  - INCUNEMP
+  - INCWKCOM
+  - INCVET
+  - INCSURV
+  - INCDISAB
+  - INCEDUC
+  - INCCHILD
+  - INCASIST
+  - INCOTHER
+  - FTOTVAL
+
+  # --- means-tested transfers and Medicaid (Mok covariates) --------------------
+  # NOTE the CPS spellings: FOODSTAMP (not the ACS FOODSTMP) and HIMCAIDLY /
+  # HIMCARELY (not the ACS HINSCAID / HINSCARE). The ACS names 400 here.
+  - FOODSTAMP
+  - HIMCAIDLY
+  - HIMCARELY
+
+  # --- Census tax-model recodes ------------------------------------------------
+  # FILESTAT is IPUMS's own filing-status recode and DEPSTAT its dependent flag.
+  # Research pass A must establish what these already do BEFORE building a unit
+  # builder that may duplicate them (todo doc A2). ADJGINC/TAXINC give the tax
+  # income concepts the filing threshold is tested against.
+  - FILESTAT
+  - DEPSTAT
+  - ADJGINC
+  - TAXINC
+  - FEDTAX
+  - STATETAX
+  - EITCRED
+  - FICA
+  - MARGTAX
+
+# Allocation (imputation) flags on the income items the filing model reads, so
+# downstream code can screen allocated values — the ~17% ASEC income
+# understatement (design memo §3.2.4) enters through exactly these variables.
+# The program prunes any flag a given year does not offer and keeps the variable.
+# In CPS the flags attach to the COMPONENT variables (OINCWAGE, OINCBUS,
+# INCLONGJ, INCINT, INCDIVID, INCOTHER), not the aggregates — asking for a flag
+# on INCTOT / INCWAGE / INCBUS returns "does not have any data quality flags"
+# and 400s the extract. Verified against the Q-flags present in the existing
+# CPS DDIs in the store (QOINCWAGE, QOINCBUS, QINCLONG, QINCINT, QINCDIVI,
+# QINCOTHE). Anything unavailable for a given year is pruned automatically.
+data_quality_flags:
+  - OINCWAGE
+  - INCLONGJ
+  - INCINT
+  - INCDIVID
+  - INCOTHER
+  - INCRENT
+  - INCSS
+  - INCRETIR
+
+# No case selection: keep every record, including group quarters. Same rule as
+# the common ACS extract — downstream projects filter, the shared file does not.
+case_selections: {}
+
+output:
+  save_location: /nfs/roberts/project/pi_nrs36/shared/raw_data/CPS-ASEC
+  id: cps_asec_common
+  layout: per_year          # one immutable folder per ASEC year; cheap annual refresh
+  data_prefix: cps
+  keep_fixed_width: true
+  write_parquet: false      # see note below
+  pooled_parquet: false     # see note below
+  count_records: true
+
+# Parquet is off deliberately. On this cluster the personal library's Arrow 24
+# lacks zstd and shadows the module's Arrow 17, which breaks parquet writes
+# (~/.claude/CLAUDE.md). The fixed-width .dat.gz + DDI is the canonical form and
+# reads fine via ipumsr::read_ipums_micro(); turn parquet on only from a session
+# where the module's Arrow is confirmed first on .libPaths().
