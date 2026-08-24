@@ -14,7 +14,9 @@
 #   Rscript download_ipums.R config/parameters.cps.yaml
 #
 # Every sample and variable below was validated against the IPUMS API on
-# 2026-08-19: all 71 variables are available in all 11 samples.
+# 2026-08-19 (original 71) and 2026-08-23 (the twelve A2b additions): available
+# in all 11 samples. Three requested names were rejected by the API and are
+# documented in place rather than dropped silently — see the A2b block.
 # =============================================================================
 
 collection: cps
@@ -131,11 +133,70 @@ variables:
   - HIMCAIDLY
   - HIMCARELY
 
+  # --- A2b additions (2026-08-23, Tax-Simulator task A2b) ----------------------
+  # Every name below was validated against the IPUMS API across ALL ELEVEN
+  # samples before being added, by submitting a probe extract and reading the
+  # rejection. That step is not optional here: download_ipums.R PRUNES
+  # unavailable variables from the API error and continues, which is right for
+  # optional variables and wrong for these — INCPEN1/INCPEN2/INCRANN block
+  # Tax-Simulator task C5 and LINENO blocks C2, so a silent prune would produce
+  # an extract that looks complete and cannot do the job.
+  #
+  # Pension and annuity income. The ASEC 2019 redesign moved these out from
+  # under the variables we were pulling, so the extract silently lost pension
+  # income from TY2018 on — and the two residual-anchor years (TY2017, TY2022)
+  # straddle that break, which is what made it worth finding.
+  - INCPEN1
+  - INCPEN2
+  - INCRANN
+  - SRCPEN1
+  - SRCPEN2
+  - INCRET1
+  - INCRET2
+  # Person line number: resolves DEPSTAT's pointers exactly. Accounts for 100%
+  # of the unresolved pointers in the TY2017/TY2022 diagnostics.
+  - LINENO
+  # Census subfamily identification. IPUMS CPS has NO SUBFAM/SFTYPE/SFRELATE
+  # (those are IPUMS USA), so subfamilies must be reconstructed from
+  # MOMLOC/POPLOC/SPLOC plus these three.
+  - FAMREL
+  - FTYPE
+  - FAMID
+  # Capital gains. NOTE: requested as CAPGAIN/CAPLOSS, which do NOT EXIST in
+  # IPUMS CPS — the variable is INCCAPG. Used only in the income measure that is
+  # REPORTED and compared to SOI AGI; the measure the transplanted Mok
+  # coefficients are scored on EXCLUDES gains. Never mix the two.
+  - INCCAPG
+  #
+  # NOT AVAILABLE, and dropped rather than left as a silent prune:
+  #   INCALIM  — alimony. Neither INCALIM nor INCALOTH exists in any of the
+  #              eleven samples (API-verified 2026-08-23). Alimony has no
+  #              separate IPUMS CPS variable for these years; it is inside
+  #              INCASIST / INCOTHER, both already pulled. Mok's AGI list wants
+  #              it separately and we cannot have it — a documented limitation,
+  #              not an oversight.
+  #   CAPGAIN / CAPLOSS — wrong names for a real variable; see INCCAPG above.
+
   # --- Census tax-model recodes ------------------------------------------------
-  # FILESTAT is IPUMS's own filing-status recode and DEPSTAT its dependent flag.
-  # Research pass A must establish what these already do BEFORE building a unit
-  # builder that may duplicate them (todo doc A2). ADJGINC/TAXINC give the tax
-  # income concepts the filing threshold is tested against.
+  # *** STANDING RULE (Tax-Simulator decisions log S12, JI 2026-08-23):
+  # *** CENSUS-DERIVED TAX VARIABLES ARE FOR VERIFYING OUR WORK, NEVER FOR
+  # *** PRODUCING IT. Everything in this block — FILESTAT, ADJGINC, TAXINC,
+  # *** FEDTAX, STATETAX, EITCRED, FICA, MARGTAX — and DEPSTAT wherever it is
+  # *** used as a filing-unit pointer rather than a relationship, may appear in
+  # *** a diagnostic, a comparison table or an acceptance check. It may NOT
+  # *** enter a tax unit's construction, an income concept, a model's
+  # *** covariates, a calibration target, or any imputation.
+  #
+  # Research pass A established why, with three independent disqualifications:
+  # ADJGINC/TAXINC are statistically matched to the SOI PUF, the same file this
+  # work exists to correct (circular); FILESTAT's filer COUNT is calibrated to
+  # administrative filing totals, so using it would make the filing model's own
+  # acceptance gate pass by construction; and it is wrong where it is not
+  # circular — head-of-household 41.5% short in TY2022, MFS absent entirely,
+  # FILESTAT broken outright in TY2020-21, DEPSTAT broken in TY2014, and 10.8%
+  # of its dependents pointing at someone the same model codes as a non-filer.
+  # They are kept in the extract precisely BECAUSE they are independent of our
+  # estimates, which is what makes them good verification.
   - FILESTAT
   - DEPSTAT
   - ADJGINC
