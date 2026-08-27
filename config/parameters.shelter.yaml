@@ -1,0 +1,143 @@
+# =============================================================================
+# parameters.shelter.yaml  —  ACS 1-year SHELTER-COST layer, merged onto
+#                             acs_common by SAMPLE+SERIAL (household) and
+#                             SAMPLE+SERIAL+PERNUM (person).
+#
+# Run:  Rscript download_ipums.R config/parameters.shelter.yaml
+#
+# WHY THIS EXISTS
+# The common extract carries OWNERSHP + RENT (contract rent) but neither
+# RENTGRS (gross rent = contract rent + utilities) nor OWNCOST (selected
+# monthly owner costs). SNAP's excess-shelter deduction needs both: the statute
+# takes continuing shelter charges plus property tax and structure insurance,
+# which for owners is exactly the SMOC concept. Without them the Affordability
+# Index's SNAP module deducts contract rent for renters and NOTHING AT ALL for
+# owners — roughly two thirds of households — which overstates net income and
+# understates benefits. See Affordability-Index docs/11_snap_imputation.md.
+#
+# WHY A SEPARATE LAYER AND NOT parameters.yaml
+# Same reasoning as parameters.weights.yaml (see README, "Replicate weights: a
+# separate merge-on layer"): the common file stays lean, and this is opt-in for
+# the one project that needs it today. The layer is EXPECTED TO BE TEMPORARY —
+# once enough projects want these variables, fold them into parameters.yaml and
+# re-run the common pull. That consolidation is planned; see the README section
+# "Retiring a merge layer".
+#
+# WHY NOT EXTEND acs_housing
+# acs_housing (created_by ag3377) is the same idea for the Housing-Utilities
+# boundary, but scoped to us2024c — the 5-YEAR file the FMR rent surface uses —
+# and it does not carry OWNCOST. Adding OWNCOST to only the new 1-year folders
+# would leave that run schema-divergent against the per-year stackability guard,
+# and it is someone else's run. Kept separate; consolidating the two housing
+# layers is part of the same planned clean-up.
+#
+# LOSSLESSNESS. Same contract as the weights layer: same samples, NO case
+# selection, so rows align 1:1 with acs_common. HHWT/PERWT are carried as merge
+# checksums, and RENT/OWNERSHP additionally — both already exist in acs_common,
+# so the join can be verified on a substantive variable rather than on weights
+# alone. A mismatch means the two layers' universes drifted and both must be
+# re-pulled.
+# =============================================================================
+
+collection: usa
+
+description: "Budget Lab ACS 1-year shelter-cost layer (merge onto acs_common by SAMPLE+SERIAL[+PERNUM])"
+
+# The three 1-year samples the Affordability Index pools. Every ID here is also
+# in parameters.yaml, per the README's subset rule. The 5-year files are NOT
+# included: acs_housing already covers us2024c for the rent surface.
+samples:
+  - us2022a
+  - us2023a
+  - us2024a
+
+variables:
+  # ---- Join keys ------------------------------------------------------------
+  - YEAR
+  - SAMPLE          # distinguishes years within a pooled read; part of the join key
+  - SERIAL          # household serial (unique within a sample)
+  - CBSERIAL        # Census Bureau original household serial (carried for parity)
+  - PERNUM          # SAMPLE+SERIAL+PERNUM is the person key (needed for GRADEATT)
+
+  # ---- Merge checksums ------------------------------------------------------
+  # Present in acs_common too; must match row-for-row after the join.
+  - HHWT
+  - PERWT
+  - OWNERSHP        # tenure: the variable that decides WHICH shelter concept applies
+  - RENT            # contract rent — the fallback the SNAP module uses today
+
+  # ---- The two that motivated the layer ------------------------------------
+  - RENTGRS         # gross rent = contract rent + utilities (renter shelter cost)
+  - OWNCOST         # selected monthly owner costs (owner shelter cost)
+
+  # ---- Owner-cost components ----------------------------------------------
+  # OWNCOST is already the SUM of these, so they are NOT needed to fix the
+  # immediate gap. They are here because SNAP lets (and in most states requires)
+  # a household use the state Standard Utility Allowance INSTEAD of its actual
+  # utility cost — and both OWNCOST and RENTGRS embed ACTUAL utilities. Doing
+  # the SUA properly means decomposing shelter net of utilities, which needs the
+  # pieces. Pulled now because the marginal cost of a column is ~zero and a
+  # second IPUMS round-trip is not.
+  #
+  # TRAP: MORTAMT1 may already include property tax and/or insurance. TAXINCL
+  # and INSINCL are the flags that say whether; without them you double-count.
+  - MORTGAGE        # mortgage status (owned free and clear vs mortgaged)
+  - MORTAMT1        # first mortgage monthly payment
+  - MORTAMT2        # second mortgage / HELOC monthly payment
+  - TAXINCL         # does MORTAMT1 include property taxes?
+  - INSINCL         # does MORTAMT1 include property insurance?
+  - PROPINSR        # annual property insurance
+  # PROPTXAMT was requested here and REJECTED by the API as an invalid name
+  # (2026-08-27). IPUMS USA offers only the bracketed PROPTX99, which acs_common
+  # already carries. No loss: OWNCOST already includes property tax, and the SUA
+  # decomposition needs the UTILITY components, not the tax line.
+  - CONDOFEE        # monthly condominium fee
+  - MOBLHOME        # annual mobile-home costs
+
+  # ---- Utilities, for the SUA decomposition --------------------------------
+  - COSTELEC
+  - COSTGAS
+  - COSTWATR
+  - COSTFUEL
+  - FUELHEAT        # heating fuel type — the SUA varies by heating source
+
+  # ---- Person-level: the SNAP student rule --------------------------------
+  # SNAP disqualifies students aged 18-49 enrolled at least half-time in higher
+  # education unless an exemption applies. acs_common carries SCHOOL (attending
+  # or not) and UHRSWORK (the 20-hour work exemption) but NOT GRADEATT, so it
+  # cannot tell a college student from a high-school student — and a 19-year-old
+  # in high school is not subject to the rule. This is the one missing piece.
+  # Joined on SAMPLE+SERIAL+PERNUM, not SAMPLE+SERIAL.
+  - GRADEATT
+
+data_quality_flags:
+  - OWNERSHP
+  - RENT
+  - RENTGRS
+  - OWNCOST
+  - MORTGAGE
+  - MORTAMT1
+  - MORTAMT2
+  - PROPINSR
+  - CONDOFEE
+  - MOBLHOME
+  - COSTELEC
+  - COSTGAS
+  - COSTWATR
+  - COSTFUEL
+  - FUELHEAT
+  - GRADEATT
+
+# MUST stay empty: the 1:1 row alignment the merge depends on is exactly what a
+# case selection would break.
+case_selections: {}
+
+output:
+  save_location: /nfs/roberts/project/pi_nrs36/shared/raw_data/ACS
+  id: acs_shelter_1yr
+  layout: per_year
+  data_prefix: usa
+  keep_fixed_width: true
+  write_parquet: false
+  pooled_parquet: false
+  count_records: true

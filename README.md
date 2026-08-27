@@ -196,12 +196,103 @@ one side) and both must be re-pulled to realign. Do the join lazily/per-year
 > `parameters.yaml` (you merge onto the matching year), but it need not cover
 > every year. Add IDs here if another project needs SEs for earlier years.
 
+## Shelter costs: a second merge-on layer
+
+`config/parameters.shelter.yaml` (run id `acs_shelter_1yr`) is the same pattern
+again, for the ACS **1-year** samples `us2022a`/`us2023a`/`us2024a`:
+
+```bash
+Rscript download_ipums.R config/parameters.shelter.yaml
+```
+
+The common extract carries `OWNERSHP` and **contract** `RENT`, but neither
+`RENTGRS` (gross rent = contract rent + utilities) nor `OWNCOST` (selected
+monthly owner costs). SNAP's excess-shelter deduction needs both — for owners the
+statute's concept *is* SMOC — so without them a SNAP model deducts contract rent
+for renters and **nothing at all for owners**, roughly two thirds of households.
+The layer also carries the owner-cost components (`MORTAMT1/2`, `TAXINCL`,
+`INSINCL`, `PROPINSR`, `CONDOFEE`, `MOBLHOME`) and utilities
+(`COST*`, `FUELHEAT`), which are what a proper **Standard Utility Allowance**
+treatment needs, since `OWNCOST` and `RENTGRS` both embed *actual* utilities; and
+`GRADEATT`, the one variable missing from `acs_common` that separates a college
+student from a high-school student for the SNAP student rule.
+
+Same lossless contract as the weights layer, with `OWNERSHP` and `RENT` carried
+as **additional** checksums beyond `HHWT`/`PERWT` — both already exist in
+`acs_common`, so the join is verified on a substantive variable and not on
+weights alone.
+
+`PROPTXAMT` is **not** a valid IPUMS USA variable name (the API rejects it;
+confirmed 2026-08-27). Property tax is available only as the bracketed
+`PROPTX99`, which `acs_common` already carries — and `OWNCOST` includes property
+tax anyway, so nothing is lost.
+
+**Relationship to `acs_housing`.** `acs_housing` is the same idea for the
+Housing-Utilities boundary, scoped to `us2024c` (the 5-year file the FMR rent
+surface uses) and *without* `OWNCOST`. The two overlap heavily and should
+eventually be one thing — see below.
+
+## Retiring a merge layer
+
+A merge layer is a **deliberate temporary**: it exists so one project can move
+without taxing every other reader of the common file. Once enough projects want
+the same variables, the layer has outlived its purpose and the variables belong
+in `parameters.yaml`.
+
+**Trigger to consolidate** — any of:
+
+- a second project starts merging the same layer;
+- the layer's variables become load-bearing for a published number rather than
+  exploratory;
+- two layers overlap (as `acs_housing` and `acs_shelter_1yr` already do).
+
+**Why this is an all-or-nothing re-pull, not an incremental add.** In `per_year`
+layout, re-running with the *same* `id` pulls **only missing years** — it will
+not retrofit new variables into years already on disk. Forcing it needs
+`--overwrite`, and a partial overwrite would leave the run's per-year files
+carrying different variable sets, which the stackability guard is there to catch.
+So folding a layer in means re-pulling **every** sample in `parameters.yaml`
+(currently 2006–2024). That is the real cost, and it is why consolidation is a
+scheduled operation rather than a casual one.
+
+**Procedure.**
+
+1. Add the layer's substantive variables to the matching group in
+   `parameters.yaml` — `RENTGRS`/`OWNCOST`/`MORT*`/`COST*` to *Housing / tenure*,
+   `GRADEATT` to *Demographics* — and their `data_quality_flags`. Drop the
+   layer's join keys and checksums; the common file already has them.
+2. Sanity-check availability before committing to a long pull: the older samples
+   carry fewer variables, and the program records per-sample gaps in each
+   `manifest.json` under `dropped_variables`. Expect real gaps in the 2000s.
+3. Bump `id` to a new run (e.g. `acs_common_v2`) rather than `--overwrite`-ing
+   `acs_common`. **Downstream repos read `acs_common` by path**, so overwriting
+   it changes data underneath running projects; a new id lets each consumer
+   re-point deliberately and roll back by editing one line.
+4. Re-pull. Verify record counts per sample match the old run exactly — the
+   universe must not move.
+5. Re-point consumers. In Affordability-Index that is `acs_common_root` in
+   `config/local_paths.yaml`, plus deleting `acs_shelter_root` and the
+   `shelter_root` plumbing in `R/02_income/01_pool_deflate.R`; `keep_cols` there
+   also needs the new names, since it selects down from the superset.
+6. Retire the layer: delete `parameters.shelter.yaml`, and fold `acs_housing`'s
+   5-year variables into the same pass so one housing story replaces two. Leave
+   the old run folders in place until every consumer has moved.
+7. Keep `parameters.weights.yaml` as a layer regardless. It is not a candidate:
+   the 160 replicate-weight columns roughly 4× the extract and only variance
+   estimation wants them, so it is opt-in **by design**, not by expedience.
+
+**The rule of thumb:** layers are for variables *one* project needs *now*;
+`parameters.yaml` is for variables *several* projects need *routinely*. Moving a
+variable from the first category to the second is the intended lifecycle, not a
+correction.
+
 ## Files
 
 | Path | Purpose |
 |------|---------|
 | `config/parameters.yaml` | The parameter file (default: common ACS). Edit this. |
 | `config/parameters.weights.yaml` | Replicate-weights layer (`REPWT`/`REPWTP`), merged onto `acs_common`. |
+| `config/parameters.shelter.yaml` | Shelter-cost layer (`RENTGRS`/`OWNCOST` + components, `GRADEATT`), merged onto `acs_common`. |
 | `config/parameters.cps.example.yaml` | Starter template for a CPS pull. |
 | `config/api_codes.example.csv` | Template for your IPUMS key (copy to `api_codes.csv`). |
 | `download_ipums.R` | The program: extract → download → manifest. |
