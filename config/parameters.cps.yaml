@@ -14,9 +14,9 @@
 #   Rscript download_ipums.R config/parameters.cps.yaml
 #
 # Every sample and variable below was validated against the IPUMS API on
-# 2026-08-19 (original 71) and 2026-08-23 (the twelve A2b additions): available
-# in all 11 samples. Three requested names were rejected by the API and are
-# documented in place rather than dropped silently — see the A2b block.
+# 2026-08-19 (original 71), 2026-08-23 (the twelve A2b additions) and 2026-08-27
+# (SCHLCOLL): available in all 11 samples. Three requested names were rejected
+# and are documented in place rather than dropped silently — see the A2b block.
 # =============================================================================
 
 collection: cps
@@ -176,6 +176,22 @@ variables:
   #              it separately and we cannot have it — a documented limitation,
   #              not an oversight.
   #   CAPGAIN / CAPLOSS — wrong names for a real variable; see INCCAPG above.
+  #                       (Both also exist only for 1992-2008 and were Census
+  #                       tax-model output, so S12 would bar them anyway —
+  #                       re-verified against the IPUMS documentation
+  #                       2026-08-27.)
+
+  # --- 2026-08-27 addition (Tax-Simulator: dependent construction) -------------
+  # School/college enrollment. The ONE variable the C-phase dependent builder
+  # needs that A2b did not reach for: the qualifying-child test treats a 19-24
+  # year old as a dependent only if enrolled FULL TIME, and the extract carries
+  # no enrollment variable at all — EDUC is attainment, which cannot answer it.
+  # Verified 2026-08-27: available in all eleven samples (universe ages 16-54
+  # from ASEC 2013 on), and no substitute is already pulled.
+  #
+  # NOTE the CPS spelling: SCHLCOLL. SCHOOL is the IPUMS USA (ACS) name and does
+  # not exist here — the same trap FOODSTAMP/HIMCAIDLY document above.
+  - SCHLCOLL
 
   # --- Census tax-model recodes ------------------------------------------------
   # *** STANDING RULE (Tax-Simulator decisions log S12, JI 2026-08-23):
