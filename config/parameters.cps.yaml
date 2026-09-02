@@ -207,6 +207,145 @@ variables:
   - FICA
   - MARGTAX
 
+  # --- CPS-ASEC-Corrected additions (2026-09-01) --------------------------------
+  # The corrected-ASEC project (johniselin-budget-lab/CPS-ASEC-Corrected) reads
+  # this same run — by decision it extends the common extract rather than adding
+  # a companion layer, replicate weights included. Every name below was
+  # API-verified on 2026-09-01 by probe extracts against cps2025_03s (#41) and
+  # cps2015_03s (#42). Per-year gaps are legitimate and pruned by the program;
+  # they are listed in place so nobody reads a pruned variable as a mistake:
+  #   ASECWTCVD                       2020-2021 samples only (pandemic weight)
+  #   INCPEN1/2 INCRET1/2 INCRANN     2019+ (already in the A2b block above)
+  #   INCRINT1/2 SRCRINT1/2           2019+ (post-redesign retirement detail)
+  #   ANYCOVLY PUBCOVLY PRVTCOVLY     2019+ (health-coverage redesign)
+  #   HOUSSUB                         cps2015_03s only (rejected for 2016+; re-pull 2026-09-01)
+  # Names that do NOT exist (API "Invalid variable name", 2026-09-01) and must
+  # not be re-added: FLSUP FL665 SUPIMP ASECIMP PRSUPINT HSUPINT (guesses for
+  # the whole-supplement flag — see UH_SUPREC_A2 below), SPMENERGY (-> SPMHEAT),
+  # SPMFEDTAX (-> SPMFEDTAXAC / SPMFEDTAXBC), SPMTENURE (-> SPMMORT), SPMHEAD
+  # (no IPUMS CPS equivalent).
+  #
+  # Design-based variance: the 160 ASEC successive-difference replicate weights,
+  # household and person. Roughly quadruples the file, accepted by decision so
+  # the shared file carries everything the correction models need.
+  - REPWT
+  - REPWTP
+  - ASECWTCVD
+  # Whole-supplement imputation status (Census form CPS-665 record match). Only
+  # exists as an UNHARMONIZED IPUMS variable, 2007-2025: 0 = no supplement
+  # record, values imputed; 1 = answered supplement; 2 = basic record only,
+  # imputed; 3 = partial supplement, imputed. This is what the drop-and-
+  # reweight step keys on. Source: cps.ipums.org UH_SUPREC_A2 page + IPUMS
+  # forum threads 4013 / 7075, 2026-09-01; API-accepted for 2015 and 2025.
+  - UH_SUPREC_A2
+  # Technical: month-in-sample, the SCHIP oversample indicators.
+  - MISH
+  - ASECOVERH
+  - ASECOVERP
+  # Household income, tenure, family count.
+  - HHINCOME
+  - HHTENURE
+  - NFAMS
+  # Program receipt and amounts beyond FOODSTAMP (SNAP months/persons/value,
+  # energy assistance, public housing / rent subsidy, school lunch, WIC, child
+  # care need).
+  # NB: FOODSTAMP (already above) is the poverty-module FAMILY MARKET VALUE of
+  # SNAP repeated on person records; household RECEIPT is FOODSTMP and the
+  # household dollar value is STAMPVAL (flag QSTAMPVA).
+  - FOODSTMP
+  - STAMPMO
+  - STAMPNO
+  - STAMPVAL
+  - HEATSUB
+  - HEATVAL
+  - PUBHOUS
+  - RENTSUB
+  - ATELUNCH
+  - LUNCHSUB
+  - FRELUNCH
+  - GOTWIC
+  - KIDCNEED
+  # Supplemental Poverty Measure block (Census SPM research file, via IPUMS)
+  # and the official poverty variables — the acceptance-test yardsticks.
+  - SPMPOV
+  - SPMTOTRES
+  - SPMTHRESH
+  - SPMWT
+  - SPMFAMUNIT
+  - SPMGEOADJ
+  - SPMSNAP
+  - SPMLUNCH
+  - SPMWIC
+  - SPMCAPHOUS
+  - SPMHEAT
+  - SPMFEDTAXAC
+  - SPMFEDTAXBC
+  - SPMSTTAX
+  - SPMFICA
+  - SPMEITC
+  - SPMMEDXPNS
+  - SPMWKXPNS
+  - SPMCHXPNS
+  - SPMCHSUP
+  - SPMCAPXPNS
+  - SPMFTOTVAL
+  - SPMMORT
+  - SPMNPERS
+  - SPMNCHILD
+  - SPMNADULTS
+  - OFFPOV
+  - OFFCUTOFF
+  - OFFPOVUNIV
+  - POVERTY
+  - CUTOFF
+  - OFFTOTVAL
+  # Poverty-module valuations of housing subsidy and school lunch (Census
+  # imputed values on the public file; HOUSSUB only available for 2015).
+  - HOUSSUB
+  - SCHLLUNCH
+  # Income-source detail: which program a dollar came from (the OASDI / SSI /
+  # disability / survivor confusion the misreporting literature documents),
+  # "received but no amount" indicators, weeks unemployed, and covariates the
+  # receipt and reweighting models use.
+  - SRCWELFR
+  - SRCUNEMP
+  - SRCEDUC
+  - SRCSURV1
+  - SRCSURV2
+  - SRCDISA1
+  - SRCDISA2
+  - SRCRINT1
+  - SRCRINT2
+  - INCSURV1
+  - INCSURV2
+  - INCDISA1
+  - INCDISA2
+  - INCRINT1
+  - INCRINT2
+  - WHYSS1
+  - WHYSS2
+  - WHYSSI1
+  - WHYSSI2
+  - GOTVDISA
+  - GOTVEDUC
+  - GOTVOTHE
+  - GOTVPENS
+  - GOTVSURV
+  - WKSUNEM1
+  - WHYNWLY
+  - VETSTAT
+  - NATIVITY
+  - DIFFANY
+  - HEALTH
+  - PENSION
+  - ANYCOVLY
+  - PUBCOVLY
+  - PRVTCOVLY
+  - HICHAMP
+  # Self-employment components (the flags attach here, not to INCBUS/INCFARM).
+  - OINCBUS
+  - OINCFARM
+
 # Allocation (imputation) flags on the income items the filing model reads, so
 # downstream code can screen allocated values — the ~17% ASEC income
 # understatement (design memo §3.2.4) enters through exactly these variables.
@@ -226,6 +365,40 @@ data_quality_flags:
   - INCRENT
   - INCSS
   - INCRETIR
+  # CPS-ASEC-Corrected additions (2026-09-01), API-verified as carrying a flag in
+  # cps2025_03s; the program prunes per year (INCRANN's flag is 2019+, e.g.).
+  # Requested and REJECTED ("does not have any data quality flags"): FOODSTAMP,
+  # HEATVAL, HIMCAIDLY, INCBUS, INCDISAB, INCPEN1, INCPEN2, INCSURV, SPMTOTRES —
+  # so SNAP value is screened via STAMPVAL's flag, self-employment via
+  # OINCBUS/OINCFARM, and Medicaid / disability / survivor / pension receipt
+  # cannot be screened for allocation from public IPUMS flags.
+  - INCSSI
+  - INCWELFR
+  - INCUNEMP
+  - INCWKCOM
+  - INCVET
+  - INCRET1
+  - INCRET2
+  - INCRANN
+  - INCEDUC
+  - INCCHILD
+  - INCASIST
+  - INCFARM
+  - OINCBUS
+  - OINCFARM
+  - STAMPVAL
+  - STAMPMO
+  - PUBHOUS
+  - RENTSUB
+  - HEATSUB
+  - ATELUNCH
+  - LUNCHSUB
+  - FRELUNCH
+  - GOTWIC
+  - INCSURV1
+  - INCSURV2
+  - INCDISA1
+  - INCDISA2
 
 # No case selection: keep every record, including group quarters. Same rule as
 # the common ACS extract — downstream projects filter, the shared file does not.

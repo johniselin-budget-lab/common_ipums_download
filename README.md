@@ -196,6 +196,18 @@ one side) and both must be re-pulled to realign. Do the join lazily/per-year
 > `parameters.yaml` (you merge onto the matching year), but it need not cover
 > every year. Add IDs here if another project needs SEs for earlier years.
 
+**CPS is the deliberate exception.** `config/parameters.cps.yaml` (run
+`cps_asec_common`) carries `REPWT`/`REPWTP` *inside* the common extract, by
+decision of the CPS-ASEC-Corrected project (2026-09-01): the ASEC is small
+(~150–200k person records a year), so the 320 replicate columns take a
+per-year file from ~9 MB to ~160 MB gzipped, which is tolerable for the
+handful of CPS consumers, and the correction models re-estimate weights inside
+every replicate, so the weights are not an occasional add-on there. The same
+pass added the whole-supplement imputation status (`UH_SUPREC_A2`, an
+unharmonized IPUMS variable), program receipt/amount detail, the SPM and
+official-poverty blocks and the wider set of allocation flags; see the
+in-file comments for what was API-verified and what each sample lacks.
+
 ## Shelter costs: a second merge-on layer
 
 `config/parameters.shelter.yaml` (run id `acs_shelter_1yr`) is the same pattern
