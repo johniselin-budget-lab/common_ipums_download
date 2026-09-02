@@ -110,6 +110,17 @@ variables:
   # Joined on SAMPLE+SERIAL+PERNUM, not SAMPLE+SERIAL.
   - GRADEATT
 
+  # ---- Person-level: the WIC and school-meals offsets (added 2026-09-02) ---
+  # Affordability-Index docs/12_wic_school_meals.md §2. SCHLTYPE (public vs
+  # private school) separates the National School Lunch Program universe —
+  # public schools and participating private/nonprofit ones — from the rest;
+  # without it every private-school child is either in or out, and both are
+  # wrong. FERTYR (gave birth in the past 12 months) is the only ACS handle on
+  # WIC's pregnant/postpartum categories, which the Census SPM benchmark shows
+  # to be ~28% of WIC units (docs/12 §10a). Both join on SAMPLE+SERIAL+PERNUM.
+  - SCHLTYPE
+  - FERTYR
+
 data_quality_flags:
   - OWNERSHP
   - RENT
@@ -134,7 +145,11 @@ case_selections: {}
 
 output:
   save_location: /nfs/roberts/project/pi_nrs36/shared/raw_data/ACS
-  id: acs_shelter_1yr
+  # v2 (2026-09-02): adds SCHLTYPE + FERTYR. A NEW id rather than --overwrite,
+  # per README "Retiring a merge layer" step 3: downstream reads by path, so
+  # the consumer re-points deliberately (Affordability-Index local_paths.yaml
+  # acs_shelter_root) and can roll back by editing one line.
+  id: acs_shelter_1yr_v2
   layout: per_year
   data_prefix: usa
   keep_fixed_width: true
