@@ -4,7 +4,10 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=16G
 #SBATCH --time=08:00:00
-#SBATCH --output=%h/slurm-logs/%x-%j.out
+#
+# No --output here: #SBATCH lines cannot expand $HOME or ~, and a bare
+# pattern lands in the submit directory (inside the repo). Pass the log
+# location at submit time.
 #
 # Run download_ipums.R as a batch job. A pull of many samples takes tens of
 # minutes of mostly waiting on IPUMS to build each extract, and long-running
@@ -13,9 +16,10 @@
 # replacement (recovering that needs another --overwrite pass). Batch is the
 # reliable venue.
 #
-#   sbatch pull_ipums.sbatch config/parameters.cps.yaml --overwrite
+#   sbatch --output=$HOME/slurm-logs/%x-%j.out pull_ipums.sbatch \
+#          config/parameters.cps.yaml --overwrite
 #
-# The log is written to ~/slurm-logs/. A finished job is not a successful one:
+# A finished job is not a successful one:
 # check that the log ends with "Complete:" and the expected sample count, and
 # check each sample's manifest.json dropped_variables.
 
