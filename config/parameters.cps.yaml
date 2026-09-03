@@ -238,6 +238,12 @@ variables:
   # reweight step keys on. Source: cps.ipums.org UH_SUPREC_A2 page + IPUMS
   # forum threads 4013 / 7075, 2026-09-01; API-accepted for 2015 and 2025.
   - UH_SUPREC_A2
+  # Census household sequence number (the public-use file's h_seq), the merge
+  # key for external ASEC-keyed products such as CBO's transfer imputations
+  # (US-CBO/means_tested_transfer_imputations keys on h_seq + pppos, with
+  # pppos = PERNUM + 40). Verified by probe extract 2026-09-03: one HSEQ per
+  # SERIAL, numbering differs from SERIAL.
+  - HSEQ
   # Technical: month-in-sample, the SCHIP oversample indicators.
   - MISH
   - ASECOVERH
