@@ -225,16 +225,47 @@ flags):
       variables. It also needed the submit-time transient-retry fix: the first
       attempt died on sample 1 to a 504 gateway timeout that the old code
       reported as an unreleased sample.
-- [ ] **6. Re-point consumers**, one line each:
-      - Affordability-Index `config/local_paths.yaml`: `acs_common_root` →
-        `acs_common_v2`; delete `acs_shelter_root` and the `shelter_root`
-        plumbing in `R/02_income/01_pool_deflate.R` (its `keep_cols` needs the
-        new names, since it selects down from the superset).
-      - caleitc_laborsupply `config/local_paths.yaml`: `acs_common_root`.
-      - Tax-Simulator `src/data/state_weights.R:94` and its comment at `:188`.
-      - Affordability-Index: retire the private 5-year extract in favour of
-        `acs_common_v2` + `acs_common_repwt`, and the private CPS extract in
-        favour of `cps_asec_common`.
+- [x] **6. Re-point consumers** — done 2026-09-04. The two `local_paths.yaml`
+      files are gitignored, so those re-points needed no commit; the code and
+      template changes are committed on a branch per repo, **not pushed**.
+      - **Affordability-Index** (`c0801b1`, branch
+        `snap-intensive-scalar-and-d22-units`) — `acs_common_root` →
+        `acs_common_v2`; `acs_shelter_root` deleted; and the whole shelter merge
+        removed from `pool_deflate_acs()`: the `shelter_root` parameter,
+        `shelter_xml()`/`read_shelter()`, the 1:1 alignment check, the
+        `HHWT`/`PERWT`/`OWNERSHP`/`RENT` checksum loop and both joins. The
+        per-year read is now read + select. `keep_cols` gains the shelter block,
+        which it must — it selects this repo's schema down from a superset.
+        `docs/11_snap_imputation.md` §7d rewritten, since it documented the
+        machinery that was just deleted.
+      - **Tax-Simulator** (`3c43050d6`, branch `state-tax`) —
+        `state_weights.R:94` and its path comment. `asec_tax_units.R` needed no
+        change: the CPS common extract kept its name and reads no replicate
+        weights, so D2's split is transparent to it.
+      - **caleitc_laborsupply** (`ea9ee84`) and **multnomah-county-tax**
+        (`f5b71b0`) — both were on `main`, so each got a branch
+        `acs-common-v2-repoint`. Committed example paths and one error message;
+        multnomah's are commented-out examples, it reads no shared ACS path
+        today.
+
+      **The sentinel screen is the part that mattered.** Dropping the merge
+      layer means one codebook instead of two, and `OWNCOST` codes
+      99999 = "not in universe" for every renter — screened against the wrong
+      codebook that sentinel survives and is deflated into a plausible-looking
+      five-figure shelter cost. Verified rather than assumed: against
+      `acs_common_v2/us2024a`, `.na_codes_for()` finds 99999 in the *common* DDI,
+      screening 13,613 of 50,000 rows, leaving a median owner cost of $980/month
+      and median gross rent of $1,055/month. All 18 shelter columns survive
+      `keep_cols` in all three years.
+
+      Still open from this step, and deliberately not attempted: retiring
+      Affordability-Index's own 5-year extract (`data/raw/acs5yr`, 2.0 G, with
+      replicate weights) in favour of `acs_common_v2` + `acs_common_repwt`, and
+      its own CPS extract (`data/raw/cps`) in favour of `cps_asec_common`. Those
+      are pipeline changes in that repo rather than path re-points, and want
+      their own pass — but they are what would finally give `acs_common_repwt` a
+      reader.
+
 - [x] **7. Re-pull `cps_asec_common` without the replicate columns** — done
       2026-09-04, job 24874487, 11/11 samples, exit 0, 17 minutes. **1,471 MB ->
       172 MB, 8.6x smaller**, better than the ~6x projected (the inline replicate
