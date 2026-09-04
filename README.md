@@ -231,9 +231,10 @@ them. Measurement said otherwise: without the replicate columns an ASEC year is
 7.6–9.4 MB gzipped (measured 2026-08-27, 85 variables); with the 322 columns
 inline it is 111–152 MB. Every consumer wanting only point estimates —
 Tax-Simulator's `asec_tax_units.R`, CPS-ASEC-Corrected's own survey aggregates —
-was reading ~130 MB a year to use ~20 MB of it. The split makes the common file
-roughly 6× cheaper to read; the cost is a per-year join for the one project that
-needs both halves on every run. See `docs/consolidation_plan.md` D2.
+was reading ~130 MB a year to use ~20 MB of it. Measured after the split, the
+common extract went from 1,471 MB to 172 MB across the eleven years — **8.6×
+cheaper to read**; the cost is a per-year join for the one project that needs
+both halves on every run. See `docs/consolidation_plan.md` D2.
 
 The 2026-09-01 pass also added the whole-supplement imputation status
 (`UH_SUPREC_A2`, an unharmonized IPUMS variable), program receipt/amount detail,

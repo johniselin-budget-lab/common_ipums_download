@@ -91,10 +91,13 @@ decision to carry them inline. Measured, not argued:
 | with the 322 replicate columns inline (as pulled 2026-09-03) | 111–152 MB | 1.4 G |
 | projected split — common, at today's 180 requested vars | ~18–20 MB | ~220 MB |
 | projected split — `cps_asec_common_repwt` | ~115 MB | ~1.3 G |
+| **measured, after the split — common** | **13.7–17.8 MB** | **172 MB** |
+| **measured, after the split — `cps_asec_common_repwt`** | ~96–110 MB | 1.2 G |
 
 Total disk barely moves; the join keys get duplicated. The gain is on the read
 side: Tax-Simulator's `asec_tax_units.R` and CPS-ASEC-Corrected's survey
-aggregates read ~20 MB a year instead of ~130 MB, roughly 6× cheaper. The cost
+aggregates read ~16 MB a year instead of ~134 MB — **8.6× cheaper measured**,
+against the ~6× projected. The cost
 lands on one project: CPS-ASEC-Corrected re-estimates weights inside every
 replicate, so it needs both halves on every run and gains a per-year join. That
 cost is accepted in exchange for a cheap common file for every consumer that does
@@ -232,7 +235,21 @@ flags):
       - Affordability-Index: retire the private 5-year extract in favour of
         `acs_common_v2` + `acs_common_repwt`, and the private CPS extract in
         favour of `cps_asec_common`.
-- [ ] **7. Re-pull `cps_asec_common` without the replicate columns**
+- [x] **7. Re-pull `cps_asec_common` without the replicate columns** — done
+      2026-09-04, job 24874487, 11/11 samples, exit 0, 17 minutes. **1,471 MB ->
+      172 MB, 8.6x smaller**, better than the ~6x projected (the inline replicate
+      block compresses worse than the 85-variable measurement implied). Every
+      record count identical; exactly one variable gained per sample —
+      `SCHLCOLL`, restored after being lost in the 2026-09-03 re-pull — and zero
+      non-replicate variables lost. All 11 folders complete; the schema-drift
+      warnings are byte-identical to the 2026-09-03 run, i.e. the same legitimate
+      per-year availability (`HOUSSUB` retired after 2015; the `INCPEN*`/`SRCRINT*`
+      retirement-income detail only from 2019), not new drift.
+
+      Before running it: the 11 pre-overwrite manifests were copied to
+      `~/ipums-manifests-preoverwrite-20260904/`, so the exact old variable lists
+      and record counts survive the folders being rewritten. Original
+      instruction:
       (`--overwrite`). The one destructive step; safe only once step 5 is
       verified, and it has a window in which the folder's old files are cleared
       and the new ones not yet down — which is why it runs in batch, never from a
