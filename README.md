@@ -24,7 +24,7 @@ It is collection-agnostic — the same program pulls CPS (see
 ## Quick start
 
 ```bash
-module load R                                   # R 4.4.1 + CRAN bundle on the server
+module load R/4.4.2-gfbf-2024a                  # pin the version; a bare `module load R` gives 4.4.1
 cp config/api_codes.example.csv config/api_codes.csv   # then paste your IPUMS API key
 Rscript download_ipums.R                         # uses config/parameters.yaml
 ```
@@ -40,6 +40,21 @@ Other invocations:
 Rscript download_ipums.R config/parameters.cps.yaml   # a different parameter file
 Rscript download_ipums.R config/parameters.yaml --overwrite   # force a re-pull
 ```
+
+**A multi-sample pull belongs in a batch job.** It is tens of minutes of mostly
+waiting on IPUMS to build each extract, and a long process started from a login
+shell gets reaped part-way through — which leaves a sample folder with its old
+files already cleared and no replacement, recoverable only with another
+`--overwrite` pass. Use `pull_ipums.sbatch`:
+
+```bash
+sbatch --output=$HOME/slurm-logs/%x-%j.out pull_ipums.sbatch \
+       config/parameters.cps.yaml --overwrite
+```
+
+A finished job is not a successful one: check that the log ends with `Complete:`
+and the expected sample count, and check each sample's `manifest.json`
+`dropped_variables`.
 
 Each pull needs a **run id** (`output.id`) — a specific, meaningful name you set
 (an empty id is a hard error). Re-running is safe: unless `--overwrite` is passed,
@@ -210,8 +225,10 @@ in-file comments for what was API-verified and what each sample lacks.
 
 ## Shelter costs: a second merge-on layer
 
-`config/parameters.shelter.yaml` (run id `acs_shelter_1yr`) is the same pattern
-again, for the ACS **1-year** samples `us2022a`/`us2023a`/`us2024a`:
+`config/parameters.shelter.yaml` (run id `acs_shelter_1yr_v2`) is the same pattern
+again, for the ACS **1-year** samples `us2022a`/`us2023a`/`us2024a`. The earlier
+`acs_shelter_1yr` folder is the superseded v1 pull, kept only until its readers
+move — it lacks `SCHLTYPE` and `FERTYR`:
 
 ```bash
 Rscript download_ipums.R config/parameters.shelter.yaml
@@ -256,7 +273,7 @@ in `parameters.yaml`.
 - a second project starts merging the same layer;
 - the layer's variables become load-bearing for a published number rather than
   exploratory;
-- two layers overlap (as `acs_housing` and `acs_shelter_1yr` already do).
+- two layers overlap (as `acs_housing` and `acs_shelter_1yr_v2` already do).
 
 **Why this is an all-or-nothing re-pull, not an incremental add.** In `per_year`
 layout, re-running with the *same* `id` pulls **only missing years** — it will
@@ -305,16 +322,19 @@ correction.
 | `config/parameters.yaml` | The parameter file (default: common ACS). Edit this. |
 | `config/parameters.weights.yaml` | Replicate-weights layer (`REPWT`/`REPWTP`), merged onto `acs_common`. |
 | `config/parameters.shelter.yaml` | Shelter-cost layer (`RENTGRS`/`OWNCOST` + components, `GRADEATT`), merged onto `acs_common`. |
+| `config/parameters.cps.yaml` | The common CPS ASEC extract (`cps_asec_common`) — carries `REPWT`/`REPWTP` inline; see above. |
 | `config/parameters.cps.example.yaml` | Starter template for a CPS pull. |
 | `config/api_codes.example.csv` | Template for your IPUMS key (copy to `api_codes.csv`). |
 | `download_ipums.R` | The program: extract → download → manifest. |
 | `R/build_extract.R` | Turns the parameter file into an `ipumsr` extract definition. |
 | `R/utils.R` | API-key reader, transient-error retry, record counter. |
+| `pull_ipums.sbatch` | Slurm wrapper — the reliable venue for a real pull (see Quick start). |
 
 ## Requirements
 
-- R (on the server: `module load R` → R 4.4.1). Packages: **ipumsr**, **yaml**,
-  **jsonlite** (all in the server CRAN bundle); **arrow** only if
-  `write_parquet: true`.
+- R (on the server: `module load R/4.4.2-gfbf-2024a` — pin the full version,
+  since a bare `module load R` silently gives the Lmod default 4.4.1 from the
+  2022b toolchain). Packages: **ipumsr**, **yaml**, **jsonlite** (all in the
+  server CRAN bundle); **arrow** only if `write_parquet: true`.
 - An IPUMS account + API key registered for the collection you're pulling
   (IPUMS USA for ACS, IPUMS CPS for CPS).
