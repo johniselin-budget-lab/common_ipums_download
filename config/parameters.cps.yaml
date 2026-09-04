@@ -241,11 +241,14 @@ variables:
   # SPMFEDTAX (-> SPMFEDTAXAC / SPMFEDTAXBC), SPMTENURE (-> SPMMORT), SPMHEAD
   # (no IPUMS CPS equivalent).
   #
-  # Design-based variance: the 160 ASEC successive-difference replicate weights,
-  # household and person. Roughly quadruples the file, accepted by decision so
-  # the shared file carries everything the correction models need.
-  - REPWT
-  - REPWTP
+  # Design-based variance: the 160 ASEC successive-difference replicate weights
+  # (REPWT household, REPWTP person) were carried HERE until 2026-09-04 and now
+  # live in their own layer, config/parameters.cps.weights.yaml -> run
+  # cps_asec_common_repwt. Reversing the 2026-09-01 decision to inline them:
+  # measured, the 322 replicate columns take a per-year file from ~8 MB to
+  # ~130 MB, and every consumer that wants only point estimates was paying that.
+  # Merge them back on SERIAL (household) and SERIAL + PERNUM (person), with
+  # ASECWTH/ASECWT as the checksum. See docs/consolidation_plan.md D2.
   - ASECWTCVD
   # Whole-supplement imputation status (Census form CPS-665 record match). Only
   # exists as an UNHARMONIZED IPUMS variable, 2007-2025: 0 = no supplement

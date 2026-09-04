@@ -1,0 +1,98 @@
+# =============================================================================
+# parameters.cps.weights.yaml  —  the CPS ASEC REPLICATE-WEIGHTS layer.
+#
+# A companion pull to parameters.cps.yaml, in the same shape as the ACS
+# parameters.weights.yaml. It fetches ONLY the record-linking keys plus the two
+# ASEC successive-difference replicate-weight blocks (REPWT = 160 household
+# weights, REPWTP = 160 person weights) for the SAME 11 samples as the common
+# CPS extract, into a parallel folder tree you MERGE onto cps_asec_common.
+#
+#   module load R/4.4.2-gfbf-2024a
+#   sbatch --output=$HOME/slurm-logs/%x-%j.out pull_ipums.sbatch \
+#          config/parameters.cps.weights.yaml
+#
+# ADDED 2026-09-04, REVERSING AN EARLIER DECISION. Until now the replicate
+# weights were carried INSIDE cps_asec_common, by a CPS-ASEC-Corrected decision
+# of 2026-09-01 that the ASEC is small enough to absorb them. Measurement said
+# otherwise (docs/consolidation_plan.md D2):
+#
+#     CPS ASEC, no replicate weights (85 vars, measured 2026-08-27)  7.6-9.4 MB/yr
+#     with the 322 replicate columns inline (as pulled 2026-09-03)    111-152 MB/yr
+#
+# so every consumer that wants only point estimates — Tax-Simulator's
+# asec_tax_units.R, CPS-ASEC-Corrected's survey aggregates — was reading ~130 MB
+# a year to use ~20 MB of it. Splitting makes the common file ~6x cheaper to read
+# and brings CPS into line with the ACS side, at the cost of a per-year join for
+# the one project that re-estimates weights inside every replicate.
+#
+# HOW THE MERGE IS LOSSLESS:
+#   An IPUMS extract is deterministic given (collection, samples, no case
+#   selection): every record in a sample is returned. Within one ASEC sample the
+#   household key is SERIAL and the person key is SERIAL + PERNUM. This file
+#   requests the SAME samples with NO case selection, so its row universe aligns
+#   1:1 with cps_asec_common. Join person-level REPWTP on SERIAL + PERNUM;
+#   household-level REPWT (constant within a household) on SERIAL. ASECWTH and
+#   ASECWT are carried purely as a merge CHECKSUM — they must match the common
+#   file row-for-row; a mismatch means the two universes drifted (someone changed
+#   `samples` or added a case selection on one side) and both must be re-pulled.
+#
+#   NOTE the CPS weight names: ASECWTH / ASECWT, not the ACS HHWT / PERWT.
+# =============================================================================
+
+collection: cps
+description: "Budget Lab common CPS ASEC replicate-weights layer (merge onto cps_asec_common by SERIAL[+PERNUM])"
+
+# ---- Samples ----------------------------------------------------------------
+# Must match parameters.cps.yaml exactly — unlike the ACS weights layer, which is
+# deliberately a subset, this covers all 11 samples because the consumer
+# (CPS-ASEC-Corrected) re-estimates weights inside every replicate for every
+# income year in the panel, not just recent ones.
+samples:
+  - cps2015_03s   # TY2014
+  - cps2016_03s   # TY2015
+  - cps2017_03s   # TY2016
+  - cps2018_03s   # TY2017  <- anchor year
+  - cps2019_03s   # TY2018
+  - cps2020_03s   # TY2019
+  - cps2021_03s   # TY2020
+  - cps2022_03s   # TY2021
+  - cps2023_03s   # TY2022  <- anchor year
+  - cps2024_03s   # TY2023
+  - cps2025_03s   # TY2024
+
+variables:
+  # --- join keys, identical to the common extract ------------------------------
+  - YEAR
+  - SERIAL          # household serial (unique within a sample) -> household key
+  - MONTH
+  - CPSID           # household longitudinal id (carried for parity)
+  - CPSIDP          # person longitudinal id  (carried for parity)
+  - ASECFLAG        # ASEC vs basic-monthly record
+  - PERNUM          # SERIAL + PERNUM is the person key
+
+  # --- merge checksums --------------------------------------------------------
+  # Point-estimate weights, carried in BOTH files. They must match row-for-row.
+  - ASECWTH
+  - ASECWT
+
+  # --- the payload ------------------------------------------------------------
+  # The 160 ASEC successive-difference replicate weights, household and person
+  # (REPWT1..REPWT160, REPWTP1..REPWTP160 — 322 columns with the two base names).
+  - REPWT
+  - REPWTP
+
+# No data-quality flags: replicate weights are derived design quantities and have
+# none. No case selections: the row universe must align 1:1 with the common file.
+data_quality_flags: []
+case_selections: {}
+
+# ---- Output / storage -------------------------------------------------------
+output:
+  save_location: /nfs/roberts/project/pi_nrs36/shared/raw_data/CPS-ASEC
+  id: cps_asec_common_repwt
+  layout: per_year          # one immutable folder per ASEC year, mirroring the common file
+  data_prefix: cps
+  keep_fixed_width: true
+  write_parquet: false      # see the parquet note in parameters.cps.yaml
+  pooled_parquet: false
+  count_records: true

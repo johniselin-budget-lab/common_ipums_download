@@ -1,4 +1,15 @@
 # =============================================================================
+# SUPERSEDED 2026-09-04 — DO NOT START A NEW PULL FROM THIS FILE.
+#
+# Every substantive variable below was folded into config/parameters.yaml (run
+# acs_common_v2) when the shelter and housing merge layers were retired; see
+# docs/consolidation_plan.md D1 and its step list. This file is kept only so the
+# acs_shelter_1yr_v2 folder on disk remains reproducible until Affordability-Index
+# re-points at acs_common_v2 (plan step 6), after which both the folder and this
+# file go (step 8).
+# =============================================================================
+
+# =============================================================================
 # parameters.shelter.yaml  —  ACS 1-year SHELTER-COST layer, merged onto
 #                             acs_common by SAMPLE+SERIAL (household) and
 #                             SAMPLE+SERIAL+PERNUM (person).

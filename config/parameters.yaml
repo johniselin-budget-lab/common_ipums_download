@@ -91,6 +91,11 @@ variables:
   - CLUSTER         # variance-estimation cluster
   - STRATA          # variance-estimation stratum
   - CPI99           # CPI-U inflation adjustment factor to 1999$
+  # Multi-year-sample support. Both are 5-year-file concepts and exist only for
+  # us2024c; the per-sample pruning drops them from the nineteen 1-year samples
+  # and logs it, the same known asymmetry EXPWTH/EXPWTP have for us2020a.
+  - MULTYEAR        # actual survey year within a multi-year sample
+  - ADJUST          # income adjustment factor for multi-year samples
 
   # --- Geography ------------------------------------------------------------
   - REGION
@@ -123,6 +128,15 @@ variables:
   - SCHOOL
   - EDUC
   - EDUCD           # detailed education
+  # Enrollment LEVEL, folded in from the shelter layer 2026-09-04. SCHOOL says
+  # whether someone is enrolled; GRADEATT says in what — the only thing that
+  # separates a college student from a high-school student, which the SNAP
+  # student rule turns on. SCHLTYPE adds public vs private (the school-meals
+  # offset); FERTYR is a birth in the last year (the WIC offset).
+  - GRADEATT
+  - GRADEATTD       # detailed grade attending
+  - SCHLTYPE
+  - FERTYR
 
   # --- Employment & labor supply --------------------------------------------
   - LABFORCE
@@ -157,10 +171,55 @@ variables:
   - HINSCARE
 
   # --- Housing / tenure (dq flags below) ------------------------------------
+  # The shelter and dwelling variables below were folded in from the
+  # acs_shelter_1yr_v2 and acs_housing merge layers on 2026-09-04
+  # (docs/consolidation_plan.md D1). Availability was probed against the live
+  # API first: us2006a carries every one of them, so the fold reaches back
+  # across the whole panel rather than only the recent years.
   - OWNERSHP
-  - RENT            # monthly contract rent
+  - RENT            # monthly CONTRACT rent (excludes utilities)
   - VALUEH          # house value
-  - PROPTX99        # property taxes
+  - PROPTX99        # property taxes, bracketed (PROPTXAMT is not a valid IPUMS
+                    # USA name — the API rejects it; OWNCOST includes property
+                    # tax anyway, so nothing is lost)
+  # The two shelter-cost concepts a means-tested model actually needs. SNAP's
+  # excess-shelter deduction takes gross rent for renters and, by statute,
+  # selected monthly owner costs for owners; OWNERSHP is what decides which
+  # applies. Without these a SNAP model deducts contract rent for renters and
+  # nothing at all for owners — roughly two thirds of households.
+  - RENTGRS         # gross rent = contract rent + utilities
+  - OWNCOST         # selected monthly owner costs (SMOC)
+  # Owner-cost components. OWNCOST is a sum, so these are what lets a model
+  # rebuild it — or substitute a Standard Utility Allowance for the utility part.
+  - MORTGAGE        # mortgage status: owned free and clear vs mortgaged
+  - MORTAMT1        # first mortgage monthly payment
+  - MORTAMT2        # second mortgage / HELOC monthly payment
+  - TAXINCL         # does MORTAMT1 include property taxes?
+  - INSINCL         # does MORTAMT1 include property insurance?
+  - PROPINSR        # annual property insurance
+  - CONDOFEE        # monthly condominium fee
+  - MOBLHOME        # annual mobile-home costs
+  # Utilities. Needed on their own because RENTGRS and OWNCOST both embed
+  # ACTUAL utility bills, and a Standard Utility Allowance treatment has to
+  # strip them back out. FUELHEAT matters because the allowance varies by
+  # heating source.
+  - COSTELEC
+  - COSTGAS
+  - COSTWATR
+  - COSTFUEL
+  - FUELHEAT
+  # Dwelling characteristics, from the acs_housing layer (the Housing-Utilities
+  # boundary and the FMR rent surface).
+  - ROOMS
+  - BEDROOMS
+  - UNITSSTR        # structure type
+  - BUILTYR2        # year structure built
+  - MOVEDIN         # year householder moved in
+  - KITCHEN
+  - PLUMBING
+  - ACREHOUS        # house-and-lot acreage
+  - RENTMEAL        # are meals included in rent?
+  - VEHICLES
 
   # --- SPM (Supplemental Poverty Measure) block -----------------------------
   # Census/NBER-TAXSIM-derived. The full block below is the union needed across
@@ -245,6 +304,36 @@ data_quality_flags:
   - PROPTX99
   - MIGRATE1D        # migration flags requested by the Multnomah model
   - MIGPLAC1
+  # Folded in with the shelter/dwelling block, 2026-09-04. OWNCOST and RENTGRS
+  # have no flag in us2006a, and ACREHOUS none in us2024c; the per-sample
+  # pruning drops those and records them in that year's manifest under
+  # dropped_dq_flags. PLUMBING is deliberately absent: it has no data-quality
+  # flag in ANY sample probed (us2006a / us2024a / us2024c), so requesting one
+  # would only add a guaranteed prune to every year.
+  - OWNERSHP
+  - RENTGRS
+  - OWNCOST
+  - MORTGAGE
+  - MORTAMT1
+  - MORTAMT2
+  - PROPINSR
+  - CONDOFEE
+  - MOBLHOME
+  - COSTELEC
+  - COSTGAS
+  - COSTWATR
+  - COSTFUEL
+  - FUELHEAT
+  - GRADEATT
+  - ROOMS
+  - BEDROOMS
+  - UNITSSTR
+  - BUILTYR2
+  - MOVEDIN
+  - KITCHEN
+  - ACREHOUS
+  - RENTMEAL
+  - VEHICLES
 
 # ---- Case selections --------------------------------------------------------
 # Restrict records by variable code, e.g. GQ: ["1","2"] to keep only
@@ -265,7 +354,12 @@ output:
   # Give each pull a specific, meaningful id (an empty id is a hard error). Re-running
   # with the same id is safe: existing output is skipped unless --overwrite (and in
   # per_year mode, only missing years are added). Use a new id for a fresh pull.
-  id: acs_common
+  # Bumped from acs_common on 2026-09-04 when the shelter and housing merge
+  # layers were folded in (docs/consolidation_plan.md). A NEW id rather than
+  # --overwrite: downstream repos read acs_common BY PATH, so overwriting would
+  # change data underneath running projects. Each consumer re-points one line
+  # and can roll back by editing it.
+  id: acs_common_v2
 
   # LAYOUT — how the samples are packaged on disk:
   #   pooled   (default) all `samples` go into ONE extract / manifest, written
