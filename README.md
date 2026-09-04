@@ -369,7 +369,8 @@ correction.
 | `config/api_codes.example.csv` | Template for your IPUMS key (copy to `api_codes.csv`). |
 | `download_ipums.R` | The program: extract → download → manifest. |
 | `R/build_extract.R` | Turns the parameter file into an `ipumsr` extract definition. |
-| `R/utils.R` | API-key reader, transient-error retry, record counter. |
+| `R/utils.R` | API-key reader, transient-error detection + retry, record counter. |
+| `R/compare_runs.R` | Check a new run against the run it supersedes: same record universe, what changed. |
 | `pull_ipums.sbatch` | Slurm wrapper — the reliable venue for a real pull (see Quick start). |
 | `docs/consolidation_plan.md` | Why there are four run folders and not eight; the plan, decisions, and remaining steps. |
 

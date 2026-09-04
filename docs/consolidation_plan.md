@@ -167,11 +167,30 @@ So:
       layer; `parameters.cps.yaml` no longer requests `REPWT`/`REPWTP`;
       `parameters.shelter.yaml` marked superseded, kept until step 6.
 - [ ] **4. Pull `acs_common_v2`** — 20 samples, additive, nothing reads it yet.
-      Verify: record counts match `acs_common` sample-for-sample (the universe
-      must not move), the SPM block is present for `us2024a`/`us2024c`, and each
-      `manifest.json`'s `dropped_variables` holds no surprises.
-- [ ] **5. Pull `cps_asec_common_repwt`** — 11 samples, additive.
-      Verify record counts against `cps_asec_common` sample-for-sample.
+      Verify with `R/compare_runs.R`, asserting the variables the re-pull was
+      actually for:
+
+      ```bash
+      Rscript R/compare_runs.R \
+        /nfs/roberts/project/pi_nrs36/shared/raw_data/ACS/acs_common \
+        /nfs/roberts/project/pi_nrs36/shared/raw_data/ACS/acs_common_v2 \
+        RENTGRS OWNCOST GRADEATT
+      ```
+
+      It exits non-zero on any record-count mismatch, which is the signal that
+      the row universe moved and no consumer may be re-pointed. Then check the
+      SPM block came back for `us2024a`/`us2024c` (finding 1) — those two samples
+      are the reason this pull is worth its cost:
+
+      ```bash
+      Rscript R/compare_runs.R \
+        .../ACS/acs_common .../ACS/acs_common_v2 SPMPOV SPMTHRESH SPMTOTRES OFFPOV
+      ```
+- [ ] **5. Pull `cps_asec_common_repwt`** — 11 samples, additive. Verify the same
+      way against `cps_asec_common`, asserting `REPWT`/`REPWTP` and the
+      `ASECWTH`/`ASECWT` checksums are present. Expect a large negative variable
+      delta: the layer carries only keys, checksums and replicates, so "LOST"
+      here is the whole substantive extract and is correct.
 - [ ] **6. Re-point consumers**, one line each:
       - Affordability-Index `config/local_paths.yaml`: `acs_common_root` →
         `acs_common_v2`; delete `acs_shelter_root` and the `shelter_root`
@@ -184,7 +203,11 @@ So:
         favour of `cps_asec_common`.
 - [ ] **7. Re-pull `cps_asec_common` without the replicate columns**
       (`--overwrite`). The one destructive step; safe only once step 5 is
-      verified. This is also the pull that restores `SCHLCOLL`. Then re-point
+      verified, and it has a window in which the folder's old files are cleared
+      and the new ones not yet down — which is why it runs in batch, never from a
+      login shell. This is also the pull that restores `SCHLCOLL`. Verify record
+      counts held with `R/compare_runs.R` against `cps_asec_common_repwt`, which
+      by then is the only run carrying the old universe. Then re-point
       CPS-ASEC-Corrected to join the two halves on `SERIAL` (household) and
       `SERIAL + PERNUM` (person), with `ASECWTH`/`ASECWT` as the merge checksum.
 - [ ] **8. Delete the superseded folders** (see below).
