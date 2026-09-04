@@ -244,8 +244,10 @@ the in-file comments for what was API-verified and what each sample lacks.
 
 **Retired 2026-09-04.** `config/parameters.shelter.yaml` (`acs_shelter_1yr_v2`)
 and ag3377's `acs_housing` were the two shelter/dwelling merge layers, and they
-overlapped heavily — which is exactly the consolidation trigger below. Their 54
-variables now live in `parameters.yaml`, pulled as `acs_common_v2`:
+overlapped heavily — which is exactly the consolidation trigger below. Their
+variables now live in `parameters.yaml`, pulled as `acs_common_v2` — a measured
+**+52 to +54 columns per sample**, with no sample losing anything and every
+record count unchanged:
 
 - **Shelter concepts** — `RENTGRS` (gross rent = contract rent + utilities) and
   `OWNCOST` (selected monthly owner costs). The common extract used to carry only

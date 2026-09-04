@@ -33,14 +33,27 @@ folded into the common file or deleted.
 
 Findings that drove the plan:
 
-1. **`acs_common`'s two newest samples are thin.** `us2024a` dropped 35 requested
-   variables and `us2024c` dropped 33 — the entire SPM (Supplemental Poverty
-   Measure) block plus `ADJGINC`, `MOOP`, `MEDICAREB`, `OFFPOV`, `TAXID` — because
-   both were pulled 2026-07-09/07-21, before IPUMS integrated those blocks into
-   the newly released samples. `us2023a` dropped only two. **The common ACS
-   extract has no SPM poverty for 2024 at all.** This is a data defect, not a
-   filing problem, and re-pulling is the only fix; it is what makes the
-   all-or-nothing re-pull below worth its cost.
+1. **`acs_common`'s two newest samples are thin, and re-pulling does NOT fix
+   it.** `us2024a` drops 35 requested variables and `us2024c` drops 33 — the
+   entire SPM (Supplemental Poverty Measure) block plus `ADJGINC`, `MOOP`,
+   `MEDICAREB`, `OFFPOV`, `TAXID` — where `us2023a` drops only two. **The common
+   ACS extract has no SPM poverty for 2024 at all.**
+
+   I assumed this was a timing artefact: both were pulled 2026-07-09/07-21, just
+   after release, and I expected IPUMS to have integrated the block by now, which
+   made the re-pull look like it would pay for itself twice over. **That was
+   wrong.** The 2026-09-04 `acs_common_v2` pull dropped the identical 33-variable
+   SPM/poverty block for both samples — IPUMS still does not offer it for the
+   2024 files. The gap is upstream and no pull from here will close it; it closes
+   when IPUMS integrates the block, and the only action available is to re-pull
+   those two samples (cheap, two folders) once it does.
+
+   The 2006–2008 and `us2020a` absences are separate and legitimate: SPM begins
+   around 2009, and `us2020a` is the experimental COVID sample.
+
+   So the consolidation stands on its own merits — one common file instead of
+   six folders and two variable lists — and not on an SPM fix that did not
+   happen.
 2. **The ACS replicate-weight layer is dead, and duplicated.** Nothing reads
    `acs_common_repwt`. Meanwhile Affordability-Index submits its own 5-year
    extract with `include_repwt = TRUE` (`R/01_download/02_acs_5yr.R:162`) into
@@ -143,8 +156,11 @@ So:
 
 ## What the fold adds
 
-54 variables that `acs_common` lacked, from the union of `acs_shelter_1yr_v2` and
-`acs_housing` (32 substantive + their allocation flags):
+**Measured on the completed pull: +52 to +54 columns per sample** (53 for
+`us2024c`), the spread being which data-quality flags a given year offers. Every
+sample gained; none lost a single variable. From the union of
+`acs_shelter_1yr_v2` and `acs_housing` (32 substantive names + their allocation
+flags):
 
 - **Shelter concepts** — `RENTGRS` (gross rent = contract rent + utilities),
   `OWNCOST` (selected monthly owner costs), `MORTGAGE`, `MORTAMT1`, `MORTAMT2`,
@@ -166,7 +182,18 @@ So:
       `id: acs_common_v2`; `parameters.cps.weights.yaml` is the new CPS weights
       layer; `parameters.cps.yaml` no longer requests `REPWT`/`REPWTP`;
       `parameters.shelter.yaml` marked superseded, kept until step 6.
-- [ ] **4. Pull `acs_common_v2`** — 20 samples, additive, nothing reads it yet.
+- [x] **4. Pull `acs_common_v2`** — done 2026-09-04, 20/20 samples, 4.7 G.
+      `R/compare_runs.R` confirms **every sample's record count is identical** to
+      `acs_common` (`us2024c` 16,095,728 → 16,095,728), +52/+54 columns, nothing
+      lost, and `RENTGRS`/`OWNCOST`/`GRADEATT` present in all 20 including
+      2006–2008. The SPM assertion failed for `us2024a`/`us2024c` — see the
+      correction in finding 1; that is upstream, not a pull defect.
+
+      The Slurm job reports **FAILED (exit 1)** despite pulling everything: the
+      script was edited in place while it ran, which shifts byte offsets under
+      Rscript's incremental parser (see the warning now in `pull_ipums.sbatch`).
+      All 20 folders were checked artifact-by-artifact and are complete. Original
+      instruction, for a clean re-run:
       Verify with `R/compare_runs.R`, asserting the variables the re-pull was
       actually for:
 
@@ -186,11 +213,15 @@ So:
       Rscript R/compare_runs.R \
         .../ACS/acs_common .../ACS/acs_common_v2 SPMPOV SPMTHRESH SPMTOTRES OFFPOV
       ```
-- [ ] **5. Pull `cps_asec_common_repwt`** — 11 samples, additive. Verify the same
-      way against `cps_asec_common`, asserting `REPWT`/`REPWTP` and the
-      `ASECWTH`/`ASECWT` checksums are present. Expect a large negative variable
-      delta: the layer carries only keys, checksums and replicates, so "LOST"
-      here is the whole substantive extract and is correct.
+- [x] **5. Pull `cps_asec_common_repwt`** — done 2026-09-04, 11/11 samples,
+      1.2 G, exit 0. Record counts identical to `cps_asec_common` in all eleven;
+      332 columns each (322 replicates + keys + the `ASECWTH`/`ASECWT`
+      checksums); the schema guard reports all 11 years share an identical
+      variable set. The large negative variable delta against the common file is
+      expected and correct — this layer deliberately carries no substantive
+      variables. It also needed the submit-time transient-retry fix: the first
+      attempt died on sample 1 to a 504 gateway timeout that the old code
+      reported as an unreleased sample.
 - [ ] **6. Re-point consumers**, one line each:
       - Affordability-Index `config/local_paths.yaml`: `acs_common_root` →
         `acs_common_v2`; delete `acs_shelter_root` and the `shelter_root`
@@ -207,7 +238,11 @@ So:
       and the new ones not yet down — which is why it runs in batch, never from a
       login shell. This is also the pull that restores `SCHLCOLL`. Verify record
       counts held with `R/compare_runs.R` against `cps_asec_common_repwt`, which
-      by then is the only run carrying the old universe. Then re-point
+      by then is the only run carrying the old universe. The split's arithmetic
+      now checks out on real files: the weights layer alone is 96 MB for
+      `cps2025_03s` against 111 MB for the inline common file, so the common file
+      after the split should land near 15-20 MB a year as projected. Then
+      re-point
       CPS-ASEC-Corrected to join the two halves on `SERIAL` (household) and
       `SERIAL + PERNUM` (person), with `ASECWTH`/`ASECWT` as the merge checksum.
 - [ ] **8. Delete the superseded folders** (see below).

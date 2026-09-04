@@ -27,6 +27,19 @@
 # which rewrites ~/.Renviron, so two concurrent jobs race on that file. If you
 # must queue a second pull, chain it:
 #   sbatch --dependency=afterany:<first job id> --output=... pull_ipums.sbatch ...
+#
+# DO NOT EDIT download_ipums.R (or anything it sources) WHILE A JOB IS RUNNING.
+# Rscript reads and parses the script file INCREMENTALLY, so an in-place rewrite
+# shifts the byte offsets under the running interpreter and it dies parsing
+# garbage at whatever point it had reached. Confirmed 2026-09-04: the
+# acs_common_v2 job pulled all 20 samples, printed "Complete", then exited 1 with
+#   Error: unexpected ')' in ".null(m))"
+# a mangled `if (!is.null(m))` from the tail of the file. The DATA was intact --
+# everything before the read position had already been parsed and run -- but the
+# job reports FAILED, which is indistinguishable at a glance from a real failure.
+# Note this survives `sed -i` (which replaces the inode, leaving the running
+# process on the old one) and bites on an in-place truncate-and-rewrite, which is
+# what most editors and scripts do. Copy the repo, or wait for the job.
 
 set -euo pipefail
 
