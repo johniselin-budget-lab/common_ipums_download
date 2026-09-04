@@ -22,6 +22,11 @@
 # A finished job is not a successful one:
 # check that the log ends with "Complete:" and the expected sample count, and
 # check each sample's manifest.json dropped_variables.
+#
+# RUN ONE PULL AT A TIME. download_ipums.R calls set_ipums_api_key(save = TRUE),
+# which rewrites ~/.Renviron, so two concurrent jobs race on that file. If you
+# must queue a second pull, chain it:
+#   sbatch --dependency=afterany:<first job id> --output=... pull_ipums.sbatch ...
 
 set -euo pipefail
 

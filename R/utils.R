@@ -51,6 +51,21 @@ read_api_key <- function(api_codes_path, label) {
   key
 }
 
+#' Is an IPUMS API error transient — i.e. worth retrying the SAME request?
+#'
+#' A 5xx or a dropped/timed-out connection means the request never reached the
+#' extract engine, so nothing about the request itself is wrong. Distinguishing
+#' these from a real 4xx rejection is what stops a gateway timeout being
+#' reported as an unreleased sample. Used at both API call sites: submitting an
+#' extract and polling for it.
+#'
+#' @param msg conditionMessage() of the caught error
+#' @return TRUE if the same request should be retried
+is_transient_ipums_error <- function(msg) {
+  grepl("status 5[0-9][0-9]", msg) ||
+    grepl("timed out|timeout|connection|temporarily", msg, ignore.case = TRUE)
+}
+
 #' Wait for an IPUMS extract, retrying transient API errors
 #'
 #' ipumsr::wait_for_extract() polls get_extract_info(); IPUMS occasionally
@@ -68,10 +83,8 @@ wait_for_extract_retry <- function(submitted, max_tries = 6, sleep_secs = 30) {
     res <- tryCatch(ipumsr::wait_for_extract(submitted), error = function(e) e)
     if (!inherits(res, "error")) return(res)
 
-    msg       <- conditionMessage(res)
-    transient <- grepl("status 5[0-9][0-9]", msg) ||
-      grepl("timed out|timeout|connection|temporarily", msg, ignore.case = TRUE)
-    if (!transient || attempt == max_tries) stop(res)
+    msg <- conditionMessage(res)
+    if (!is_transient_ipums_error(msg) || attempt == max_tries) stop(res)
 
     message("   Transient IPUMS API error (attempt ", attempt, "/", max_tries,
             "): ", msg, "\n   Re-polling the same extract in ", sleep_secs, "s ...")

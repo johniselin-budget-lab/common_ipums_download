@@ -166,6 +166,7 @@ pull_one <- function(params, samples, save_dir, id, run_id, file_stem, overwrite
   dropped_var <- character(0)   # variables removed entirely (unavailable)
   dropped_dq  <- character(0)   # variables kept, but their dq flag removed
   submitted   <- NULL
+  transient   <- 0L            # transient submit failures retried so far
   for (attempt in seq_len(12)) {
     extract_def <- build_extract(cur_params, samples = samples)
     res <- tryCatch(submit_extract(extract_def), error = function(e) e)
@@ -189,10 +190,26 @@ pull_one <- function(params, samples, save_dir, id, run_id, file_stem, overwrite
       }
       next
     }
-    # Nothing parseable — a genuine error (e.g. an unreleased/invalid sample).
+    # A transient server-side failure at SUBMIT time — a 504 gateway timeout is
+    # the one seen in practice (2026-09-04, the first cps_asec_common_repwt run,
+    # which it killed on the first sample while reporting it as an unreleased
+    # sample). The request never reached the extract engine, so there is nothing
+    # to prune and the extract definition is fine: re-submit it unchanged.
+    # wait_for_extract_retry() has always done this for the POLLING half; the
+    # submit half had no such retry, so any 5xx aborted the whole run.
+    if (is_transient_ipums_error(msg) && transient < 5L) {
+      transient <- transient + 1L
+      cat("   [", id, "] transient IPUMS API error on submit (retry ", transient,
+          "/5): ", msg, "\n   Re-submitting the same extract in 60s ...\n", sep = "")
+      Sys.sleep(60)
+      next
+    }
+    # Nothing parseable and not transient — a genuine error (e.g. an
+    # unreleased/invalid sample, or an invalid variable name).
     stop("IPUMS rejected the extract for sample ", paste(samples, collapse = ", "),
          " and no droppable variable/flag was named — the sample may be unreleased ",
-         "or invalid.\n  See https://usa.ipums.org/usa-action/samples\n  ", msg, call. = FALSE)
+         "or invalid, or a variable name may not exist in this collection.",
+         "\n  See https://usa.ipums.org/usa-action/samples\n  ", msg, call. = FALSE)
   }
   if (is.null(submitted)) {
     stop("Could not submit extract [", id, "] after ", 12, " pruning attempts.", call. = FALSE)
