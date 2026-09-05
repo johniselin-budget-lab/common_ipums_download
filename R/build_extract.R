@@ -12,7 +12,9 @@ suppressPackageStartupMessages({
 
 #' Build an IPUMS micro extract definition from a parsed parameters list
 #'
-#' @param params The list returned by yaml::read_yaml("config/parameters.yaml")
+#' @param params The list returned by yaml::read_yaml("config/parameters.yaml").
+#'   Recognises an optional top-level `data_structure` ("rectangular", the
+#'   default, or "hierarchical").
 #' @param samples Optional character vector of sample IDs to request instead of
 #'   params$samples. Used by the per-year layout to pull one sample at a time
 #'   while keeping the SAME variable list, so every year's file stays uniformly
@@ -23,6 +25,18 @@ build_extract <- function(params, samples = NULL) {
   collection <- params$collection %||% "usa"
   samples    <- samples %||% unlist(params$samples, use.names = FALSE)
   var_names  <- unlist(params$variables, use.names = FALSE)
+
+  # Record shape. "rectangular" (the default, on person records) is what every
+  # common extract wants: one row per person, household fields repeated down the
+  # household. "hierarchical" returns separate HOUSEHOLD and PERSON record types,
+  # which is what a unit-level analysis needs -- a housing-unit rent surface, say,
+  # where person-rectangularising would repeat every household column by household
+  # size and silently person-weight a distribution of dwellings.
+  data_structure <- params$data_structure %||% "rectangular"
+  if (!data_structure %in% c("rectangular", "hierarchical")) {
+    stop("Unknown data_structure: '", data_structure,
+         "'. Use 'rectangular' or 'hierarchical'.", call. = FALSE)
+  }
 
   if (length(samples) == 0)   stop("No `samples` listed in parameters.yaml", call. = FALSE)
   if (length(var_names) == 0) stop("No `variables` listed in parameters.yaml", call. = FALSE)
@@ -58,10 +72,11 @@ build_extract <- function(params, samples = NULL) {
   })
 
   define_extract_micro(
-    collection  = collection,
-    description = params$description %||% "common_ipums_download extract",
-    samples     = samples,
-    variables   = var_list
+    collection     = collection,
+    description    = params$description %||% "common_ipums_download extract",
+    samples        = samples,
+    variables      = var_list,
+    data_structure = data_structure
   )
 }
 

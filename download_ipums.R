@@ -134,6 +134,7 @@ pull_one <- function(params, samples, save_dir, id, run_id, file_stem, overwrite
   data_prefix      <- out$data_prefix %||% "usa"
   keep_fixed_width <- isTRUE(out$keep_fixed_width %||% TRUE)
   write_parquet    <- isTRUE(out$write_parquet %||% FALSE)
+  hierarchical     <- identical(params$data_structure %||% "rectangular", "hierarchical")
   count_records    <- isTRUE(out$count_records %||% TRUE)
 
   cat("Output dir:  ", save_dir, "\n", sep = "")
@@ -260,7 +261,16 @@ pull_one <- function(params, samples, save_dir, id, run_id, file_stem, overwrite
 
   # ---- Optional per-file parquet --------------------------------------------
   parquet_path <- NA_character_
-  if (write_parquet) {
+  if (write_parquet && hierarchical) {
+    # A hierarchical extract has two record types, so it reads as a LIST of
+    # tables (read_ipums_micro_list) and has no single rectangle to write.
+    cat("   write_parquet = TRUE but this is a hierarchical extract (HOUSEHOLD +
+",
+        "   PERSON record types) — no single table to write. Skipping parquet;
+",
+        "   the .dat.gz + DDI is the artifact.
+", sep = "")
+  } else if (write_parquet) {
     if (requireNamespace("arrow", quietly = TRUE)) {
       cat(">> Reading microdata to write parquet ...\n")
       micro <- read_ipums_micro(ddi, verbose = FALSE)
@@ -317,6 +327,7 @@ pull_one <- function(params, samples, save_dir, id, run_id, file_stem, overwrite
     data_file        = paste0(file_stem, ".dat.gz"),
     ddi_file         = paste0(file_stem, ".xml"),
     samples          = as.list(samples),
+    data_structure   = params$data_structure %||% "rectangular",
     n_variables      = nrow(var_info),
     variables        = as.list(var_info$var_name),
     dropped_variables = as.list(sort(dropped_var)),   # requested but unavailable for this sample
@@ -353,7 +364,12 @@ pull_one <- function(params, samples, save_dir, id, run_id, file_stem, overwrite
 #   drift: if the incoming year's columns don't match the existing pooled set,
 #   the append is refused (the pooled dataset must stay uniformly stackable).
 # =============================================================================
-append_year_to_pooled <- function(manifest, pooled_dir) {
+append_year_to_pooled <- function(manifest, pooled_dir, hierarchical = FALSE) {
+  if (isTRUE(hierarchical)) {
+    cat("   pooled_parquet is not supported for a hierarchical extract [",
+        manifest$id, "] — skipping.\n", sep = "")
+    return(invisible(NULL))
+  }
   if (!requireNamespace("arrow", quietly = TRUE)) {
     cat("   pooled_parquet = TRUE but the 'arrow' package is not installed — skipping pooled append.\n")
     return(invisible(NULL))
@@ -509,7 +525,11 @@ if (identical(layout, "per_year")) {
                   file_stem = file_stem_for(s, per_year = TRUE), overwrite = overwrite)
     if (!is.null(m)) {
       n_pulled <- n_pulled + 1L
-      if (pooled_parquet) append_year_to_pooled(m, pooled_dir)
+      if (pooled_parquet) {
+        append_year_to_pooled(m, pooled_dir,
+                              hierarchical = identical(params$data_structure %||% "rectangular",
+                                                       "hierarchical"))
+      }
     }
     cat("\n")
   }

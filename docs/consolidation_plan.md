@@ -269,13 +269,52 @@ flags):
       and median gross rent of $1,055/month. All 18 shelter columns survive
       `keep_cols` in all three years.
 
-      Still open from this step, and deliberately not attempted: retiring
-      Affordability-Index's own 5-year extract (`data/raw/acs5yr`, 2.0 G, with
-      replicate weights) in favour of `acs_common_v2` + `acs_common_repwt`, and
-      its own CPS extract (`data/raw/cps`) in favour of `cps_asec_common`. Those
-      are pipeline changes in that repo rather than path re-points, and want
-      their own pass — but they are what would finally give `acs_common_repwt` a
-      reader.
+      **The two private extracts, worked 2026-09-04.** Both were listed here as
+      "retire in favour of the shared runs". One was; the other turned out to
+      rest on a wrong assumption of mine.
+
+      - **CPS — retired** (Affordability-Index `424c357`). `03_cps_asec.R` is
+        deleted. It was pulled once on 2026-06-24 and **nothing ever read it** —
+        Steps 5/7, its stated consumers, are not built — so it cost an IPUMS
+        extract on every run of `01_download_data.R` for nothing. 53 of its 56
+        variables are in `cps_asec_common`, over 11 ASEC years rather than three.
+        `cps_asec_root` now points at the shared store. The three variables not
+        carried are `FEDTAXAC`, `STATAXAC`, `CTCCRD` — Census tax-model output
+        under S12 — and since nothing used them, the S12 conflict I flagged
+        dissolves rather than needing a ruling.
+
+      - **5-year — NOT retired, because it cannot be.** I had assumed this was
+        duplication. It is not. The rent surface reads
+        `read_ipums_micro_list()` and takes `parts$HOUSEHOLD`: it needs a
+        **hierarchical** extract with separate HOUSEHOLD and PERSON record types.
+        `acs_common_v2` is rectangular on person — verified, it has no `RECTYPE`,
+        no `NUMPREC`, and every row is a person record. A rent surface is a
+        distribution over *dwellings*, so person-rectangularising it repeats each
+        household column by household size and silently person-weights the
+        result: a household of five counts five times. On top of that its default
+        sample is `us2023c` (HUD's FY2026 FMR base vintage), which was never in
+        the shared area at all, and it needs `MET2013`, `METRO` and `NUMPREC`,
+        none of which `acs_common_v2` carries.
+
+        So the right move is not a fold but a **promotion**: make it a shared,
+        manifested run instead of a private pull. `config/parameters.housing5yr.yaml`
+        (`acs_housing_5yr`, `us2023c` + `us2024c`) now defines it, and
+        `build_extract()` supports `data_structure: hierarchical` with the
+        parquet paths guarded, since a two-record-type extract has no single
+        table to write. **The pull has not been run** — it is ~2-3 GB and
+        rewiring the rent surface to read it is a further change in that repo.
+
+        `REPWT` is carried **inline** here, which looks inconsistent with D2 until
+        you apply D2's own test: `acs_common` and `cps_asec_common` have many
+        readers who mostly want point estimates, so replicates are a layer;
+        `acs_housing_5yr` has exactly one reader which needs a design-based
+        margin of error on every estimate, because HUD's reliability gate is
+        MOE < 50% of the estimate. There is no point-estimate-only use of it, so
+        a layer would add a join to every read and serve nobody.
+
+        `acs_common_repwt` therefore still has **no reader**. Retiring the
+        private 5-year extract was the candidate for giving it one, and that turns
+        out not to be the relationship. Worth revisiting on its own terms.
 
 - [x] **7. Re-pull `cps_asec_common` without the replicate columns** — done
       2026-09-04, job 24874487, 11/11 samples, exit 0, 17 minutes. **1,471 MB ->

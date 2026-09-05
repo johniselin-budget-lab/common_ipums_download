@@ -1,0 +1,157 @@
+# =============================================================================
+# parameters.housing5yr.yaml  —  the ACS 5-YEAR HOUSING-UNIT extract.
+#
+# The rent surface behind HUD Fair Market Rent comparisons. This is the one
+# extract that CANNOT be served by the common file, and the reason is structural
+# rather than a missing variable:
+#
+#   * The common extract is RECTANGULAR ON PERSON — one row per person, household
+#     fields repeated down the household. This extract is HIERARCHICAL: separate
+#     HOUSEHOLD and PERSON record types, read with read_ipums_micro_list().
+#   * A rent surface is a distribution over DWELLINGS. Person-rectangularising it
+#     repeats every household column by household size, so reading it naively
+#     person-weights the rent distribution -- a household of five counts five
+#     times. That is a silent error producing a plausible-looking number.
+#
+#   Added 2026-09-04, promoting what had been a private pull inside
+#   Affordability-Index (R/01_download/02_acs_5yr.R -> data/raw/acs5yr, 2.0 GB)
+#   into a shared, manifested run. See docs/consolidation_plan.md.
+#
+#   sbatch --output=$HOME/slurm-logs/%x-%j.out pull_ipums.sbatch \
+#          config/parameters.housing5yr.yaml
+#
+# WHY NOT FOLD IT INTO parameters.yaml, like the shelter layer?
+#   Because data_structure is a property of the whole extract, not of a variable.
+#   Folding these in would mean making the COMMON file hierarchical, which every
+#   other consumer would then have to handle. This is the case the README's rule
+#   is about: one project needs this shape now, so it is its own run.
+# =============================================================================
+
+collection: usa
+description: "Budget Lab ACS 5-year housing-unit extract (rent surface / FMR comparison)"
+
+# Record shape: HOUSEHOLD + PERSON record types, not person-rectangular.
+data_structure: hierarchical
+
+# -----------------------------------------------------------------------------
+# Samples. BOTH 5-year files use 2020 PUMAs throughout, which the metro
+# crosswalk assumes.
+#   us2023c  HUD's own FY2026 FMR base vintage, so it is what a published-FMR
+#            benchmark must run on. This is the default sample downstream.
+#   us2024c  the freshest 5-year window.
+# DO NOT ADD us2022c: it is a MIXED PUMA VINTAGE file (2010 PUMAs for 2018-21,
+# 2020 PUMAs for 2022) and would break the single-vintage crosswalk assumption.
+# -----------------------------------------------------------------------------
+samples:
+  - us2023c
+  - us2024c
+
+variables:
+  # --- identifiers, weights, occupancy ----------------------------------------
+  - YEAR
+  - SAMPLE
+  - SERIAL
+  - CBSERIAL
+  - MULTYEAR        # actual survey year within the 5-year window
+  - HHWT
+  - PERNUM
+  - PERWT
+  - NUMPREC         # persons in the unit; 0 marks a vacant unit
+  - GQ
+  - CLUSTER         # variance-estimation cluster
+  - STRATA          # variance-estimation stratum
+
+  # --- replicate weights, CARRIED INLINE (deliberately, see below) -------------
+  # 80 household replicate weights. This is the one run where replicate weights
+  # belong INSIDE the extract rather than in an opt-in layer beside it, and the
+  # reason is the same test that decided the CPS split the other way: who needs
+  # them, and how often.
+  #
+  #   acs_common / cps_asec_common  -- many readers, most wanting point estimates
+  #                                    only, so replicates are a separate layer.
+  #   acs_housing_5yr               -- ONE reader, which needs a design-based
+  #                                    margin of error on EVERY estimate, because
+  #                                    HUD's own reliability gate is MOE < 50% of
+  #                                    the estimate. There is no point-estimate-
+  #                                    only use of this file.
+  #
+  # Splitting them here would add a join to every single read and serve nobody.
+  # Note these are HOUSEHOLD replicate weights and this is a household-level
+  # file, so they sit naturally on the HOUSEHOLD record.
+  - REPWT
+
+  # --- geography ---------------------------------------------------------------
+  # MET2013 / METRO are the two the common extract does NOT carry, and they are
+  # what makes this a metro-level rent surface rather than a state one.
+  - STATEFIP
+  - PUMA
+  - COUNTYFIP
+  - MET2013         # metropolitan area, 2013 OMB definitions
+  - METRO           # metropolitan status (central/outside/indeterminate)
+
+  # --- rent and utilities -------------------------------------------------------
+  - RENT            # contract rent
+  - RENTGRS         # gross rent = contract rent + utilities; the FMR concept
+  - COSTELEC
+  - COSTGAS
+  - COSTWATR
+  - COSTFUEL
+
+  # --- unit quality (HUD's FMR universe screens on these) -----------------------
+  - PLUMBING
+  - KITCHEN
+  - ACREHOUS
+  - BUILTYR2
+  - UNITSSTR
+  - ROOMS
+
+  # --- tenure and size ----------------------------------------------------------
+  - OWNERSHP
+  - OWNERSHPD
+  - BEDROOMS
+
+  # --- owner side (not a price; carried for the owner-cost comparison) ----------
+  - VALUEH
+  - OWNCOST
+  - PROPTX99
+  - PROPINSR
+  - MORTGAGE
+
+  # --- person record ------------------------------------------------------------
+  # MOVEDIN is served only on PERSON records by the API, and the recent-mover
+  # screen needs it; join it from PERNUM == 1, the householder.
+  - MOVEDIN
+
+data_quality_flags:
+  - RENT
+  - RENTGRS
+  - COSTELEC
+  - COSTGAS
+  - COSTWATR
+  - COSTFUEL
+  - KITCHEN
+  - ACREHOUS
+  - BUILTYR2
+  - UNITSSTR
+  - ROOMS
+  - OWNERSHP
+  - BEDROOMS
+  - VALUEH
+  - OWNCOST
+  - PROPTX99
+  - PROPINSR
+  - MORTGAGE
+  - MOVEDIN
+
+# No case selection: the universe must stay whole so the unit counts are right.
+case_selections: {}
+
+output:
+  save_location: /nfs/roberts/project/pi_nrs36/shared/raw_data/ACS
+  id: acs_housing_5yr
+  layout: per_year          # one folder per 5-year sample
+  data_prefix: usa
+  keep_fixed_width: true
+  write_parquet: false      # hierarchical: there is no single table to write
+  pooled_parquet: false     # ditto
+  count_records: true
