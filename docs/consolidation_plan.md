@@ -14,6 +14,17 @@ CPS-ASEC/cps_asec_common       the common CPS ASEC extract, point-estimate weigh
 CPS-ASEC/cps_asec_common_repwt CPS ASEC replicate weights, opt-in, all 11 samples
 ```
 
+**Reached 2026-09-04.** The shared area now holds exactly these four, plus
+`ACS/acs_housing` (ag3377's, pending their sign-off) and the two legacy `v1`
+trees (jmk263's, still read by Safety-Net and Reports — not ours):
+
+| | size |
+|---|---|
+| `ACS/acs_common_v2` | 4.7 G |
+| `ACS/acs_common_repwt` | 3.6 G |
+| `CPS-ASEC/cps_asec_common` | 171 M |
+| `CPS-ASEC/cps_asec_common_repwt` | 1.2 G |
+
 The shape is deliberate and symmetric: **one common file per collection, with the
 replicate weights beside it in a merge-on layer.** Everything else is either
 folded into the common file or deleted.
@@ -293,7 +304,20 @@ flags):
       re-point
       CPS-ASEC-Corrected to join the two halves on `SERIAL` (household) and
       `SERIAL + PERNUM` (person), with `ASECWTH`/`ASECWT` as the merge checksum.
-- [ ] **8. Delete the superseded folders** (see below).
+- [x] **8. Delete the superseded folders** — done 2026-09-04 for the three that
+      are ours: `acs_common` (3.9 G), `acs_shelter_1yr` (173 M) and
+      `acs_shelter_1yr_v2` (176 M), **4.2 G reclaimed**. Confirmed beforehand
+      that no live code referenced any of them — the only remaining mentions are
+      history comments and one gitignored probe script — and confirmed
+      afterwards that all four consumers' configured paths still resolve.
+      Manifests and `variables.csv` for all 26 deleted sample folders were
+      preserved to `~/ipums-manifests-deleted-20260904/` (3.0 MB) first.
+
+      **`acs_housing` (265 M) is NOT deleted** — it is ag3377's folder. Its
+      variables are all in `acs_common_v2`, nothing reads it, but it is not ours
+      to remove. `docs/note_to_ag3377_acs_housing.md` is the draft note: it asks
+      for the deletion, and separately raises the fork, which is the more
+      important half.
 
 ## What gets deleted, and what does not
 
