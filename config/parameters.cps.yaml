@@ -250,11 +250,22 @@ variables:
   # Merge them back on SERIAL (household) and SERIAL + PERNUM (person), with
   # ASECWTH/ASECWT as the checksum. See docs/consolidation_plan.md D2.
   - ASECWTCVD
-  # Whole-supplement imputation status (Census form CPS-665 record match). Only
-  # exists as an UNHARMONIZED IPUMS variable, 2007-2025: 0 = no supplement
-  # record, values imputed; 1 = answered supplement; 2 = basic record only,
-  # imputed; 3 = partial supplement, imputed. This is what the drop-and-
-  # reweight step keys on. Source: cps.ipums.org UH_SUPREC_A2 page + IPUMS
+  # Whole-supplement imputation status (Census form CPS-665 record match, the
+  # public file's FL_665). Only exists as an UNHARMONIZED IPUMS variable,
+  # 2007-2025: 0 = no supplement record found, values imputed; 1 = answered
+  # supplement; 2 = basic record only, all supplement values imputed; 3 = some
+  # supplement information collected but not enough to match to the basic
+  # record, ALL SUPPLEMENT VALUES IMPUTED. This is what the drop-and-reweight
+  # step keys on.
+  # CORRECTION 2026-09-16: code 3 was glossed here as "partial supplement,
+  # imputed", which reads as though most items were answered. Nothing on a
+  # code-3 record is answered. Both the Census dictionary and the IPUMS display
+  # truncate the label at the same point; the full Unicon text IPUMS reprints is
+  # above. Measured on this run (CPS-ASEC-Corrected D37): code 3 matches code 2
+  # in all 88 component x year allocation cells, contains nobody under 15, and
+  # 66% of its persons live with a supplement answerer against 0.01% for code 2.
+  # It is the PERSON-level whole imputation, one adult in an otherwise
+  # interviewed household. Source: cps.ipums.org UH_SUPREC_A2 page + IPUMS
   # forum threads 4013 / 7075, 2026-09-01; API-accepted for 2015 and 2025.
   - UH_SUPREC_A2
   # Census household sequence number (the public-use file's h_seq), the merge
@@ -371,6 +382,53 @@ variables:
   - OINCBUS
   - OINCFARM
 
+  # --- CPS-ASEC-Corrected additions (2026-09-16): the retirement source split --
+  # WHY. The 2019 ASEC redesign split retirement income into pensions, accounts
+  # and annuities, and the A2b block above added the post-2019 AMOUNTS
+  # (INCPEN1/2, INCRET1/2, INCRANN). What neither block reached for is the
+  # SOURCE codes, and on the pre-2019 side the source-level detail was never
+  # requested at all. The consequence, found while building CPS-ASEC-Corrected's
+  # step 1 (its decisions log D39): INCRETIR does not survive the break intact.
+  # Before 2019 it carries the whole retirement concept; from 2019 IPUMS
+  # documents it as "only income from retirement accounts, and not pension plans
+  # or annuities". Carrying it across the break shows retirement income falling
+  # 68% in 2019; adding it to the detail shows it rising 48%. Both are artifacts,
+  # and with only INCRETIR before the break there is no way to decompose the
+  # pre-2019 aggregate into the post-2019 components to tell real change from
+  # the processing change.
+  #
+  # WHAT THESE BUY. SRCRETI1/2 carry the same three-way distinction the redesign
+  # later split into separate variables — company and union pensions, federal,
+  # military, state and local, Railroad Retirement, ANNUITIES or paid-up
+  # insurance policies, and IRA / KEOGH / 401K ACCOUNTS — so INCRETI1/2 can be
+  # allocated to pension / annuity / account and compared like with like across
+  # 2019. IPUMS states the lineage in INCRANN's own description: "Prior to 2019,
+  # retirement income from annuities was reported in INCRETI1 or INCRETI2 for
+  # those who reported annuities as a source of retirement income in SRCRETI1
+  # and SRCRETI2." They also test a mechanism for the level shift: before 2019
+  # the questionnaire recorded TWO sources, after it there are five slots (two
+  # pension, two account, one annuity), so a person with all three could not
+  # report them all.
+  #
+  # SRCRET1/2 close the matching post-break gap: the run already carries
+  # INCRET1/INCRET2 without the source codes that say what they are, which is
+  # why CPS-ASEC-Corrected cannot currently rule out (only bound, at 2.58% of
+  # its retirement total) an overlap between the account and annuity series.
+  #
+  # API-verified 2026-09-16 by probe extracts, per the README's procedure
+  # (submit, never download; extracts 115-120). All six names are VALID — none
+  # returned "Invalid variable name" — and availability splits cleanly at the
+  # break, which the program prunes per year and logs in each manifest.json:
+  #   INCRETI1 INCRETI2 SRCRETI1 SRCRETI2   cps2015_03s-cps2018_03s only
+  #                                          (IPUMS availability 1988-2018)
+  #   SRCRET1 SRCRET2                        cps2019_03s-cps2025_03s only
+  - INCRETI1
+  - INCRETI2
+  - SRCRETI1
+  - SRCRETI2
+  - SRCRET1
+  - SRCRET2
+
 # Allocation (imputation) flags on the income items the filing model reads, so
 # downstream code can screen allocated values — the ~17% ASEC income
 # understatement (design memo §3.2.4) enters through exactly these variables.
@@ -424,6 +482,18 @@ data_quality_flags:
   - INCSURV2
   - INCDISA1
   - INCDISA2
+  # 2026-09-16: the pre-2019 retirement source block. All four carry a flag in
+  # cps2018_03s (probe-verified 2026-09-16) and are pruned automatically from
+  # 2019 on, where the variables themselves do not exist.
+  # Requested and REJECTED ("does not have any data quality flags"): SRCRET1,
+  # SRCRET2 — the post-2019 source codes carry no flag, so an allocated
+  # INCRET1/INCRET2 amount cannot be told from its source's allocation status.
+  # (INCRETIR, already listed above, reports "has data quality flags, but none
+  # are available" for cps2018_03s and is pruned there too.)
+  - INCRETI1
+  - INCRETI2
+  - SRCRETI1
+  - SRCRETI2
 
 # No case selection: keep every record, including group quarters. Same rule as
 # the common ACS extract — downstream projects filter, the shared file does not.
