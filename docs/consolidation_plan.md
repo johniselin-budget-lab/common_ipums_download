@@ -11,7 +11,7 @@ plan to get to **four**, and only four:
 ACS/acs_common_v2         the common ACS extract, point-estimate weights only
 ACS/acs_common_repwt      ACS replicate weights, opt-in, scoped to 4 samples
 CPS-ASEC/cps_asec_common       the common CPS ASEC extract, point-estimate weights only
-CPS-ASEC/cps_asec_common_repwt CPS ASEC replicate weights, opt-in, all 11 samples
+CPS-ASEC/cps_asec_common_repwt CPS ASEC replicate weights, opt-in, all 12 samples
 ```
 
 **Reached 2026-09-04.** The shared area now holds exactly these four, plus

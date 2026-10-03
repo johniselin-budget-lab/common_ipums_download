@@ -17,6 +17,13 @@
 # 2026-08-19 (original 71), 2026-08-23 (the twelve A2b additions) and 2026-08-27
 # (SCHLCOLL): available in all 11 samples. Three requested names were rejected
 # and are documented in place rather than dropped silently — see the A2b block.
+#
+# cps2026_03s added 2026-10-03, once IPUMS released ASEC 2026. Probed per the
+# README's procedure (submit, never download; extract #136) with this file's full
+# variable list: accepted, and it drops EXACTLY what cps2024_03s and cps2025_03s
+# drop — variables ASECWTCVD HOUSSUB INCRETI1 INCRETI2 SRCRETI1 SRCRETI2, dq
+# flags INCRETI1 INCRETI2 INCRETIR SRCRETI2 — so the 2026 year stacks with the
+# rest and no load-bearing variable (A2b block, UH_SUPREC_A2) is pruned.
 # =============================================================================
 
 collection: cps
@@ -24,12 +31,13 @@ description: "Budget Lab common CPS ASEC extract (filing model, tax units, incom
 
 # -----------------------------------------------------------------------------
 # Samples. ASEC year Y asks about income in calendar year Y-1, so the sample IDs
-# below cover INCOME YEARS 2014-2024 — deliberately, not incidentally:
+# below cover INCOME YEARS 2014-2025 — deliberately, not incidentally:
 #   cps2018_03s -> TY2017   } the two residual-anchor years
 #   cps2023_03s -> TY2022   }
 #   cps2015_03s, cps2017_03s..cps2020_03s -> TY2014, TY2016-2019, the back years
 #                            design memo §8 needs once back-year weights are fit
-# cps2025_03s (TY2024) is the latest released; ASEC 2026 lands ~Sept 2026.
+# cps2026_03s (TY2025) is the latest released (added 2026-10-03); ASEC 2027
+# lands ~Sept 2027 — add it to parameters.cps.weights.yaml at the same time.
 # -----------------------------------------------------------------------------
 samples:
   - cps2015_03s   # TY2014
@@ -43,6 +51,7 @@ samples:
   - cps2023_03s   # TY2022  <- anchor year
   - cps2024_03s   # TY2023
   - cps2025_03s   # TY2024
+  - cps2026_03s   # TY2025
 
 variables:
   # --- identifiers and weights -------------------------------------------------
@@ -252,7 +261,7 @@ variables:
   - ASECWTCVD
   # Whole-supplement imputation status (Census form CPS-665 record match, the
   # public file's FL_665). Only exists as an UNHARMONIZED IPUMS variable,
-  # 2007-2025: 0 = no supplement record found, values imputed; 1 = answered
+  # 2007-2026: 0 = no supplement record found, values imputed; 1 = answered
   # supplement; 2 = basic record only, all supplement values imputed; 3 = some
   # supplement information collected but not enough to match to the basic
   # record, ALL SUPPLEMENT VALUES IMPUTED. This is what the drop-and-reweight
@@ -266,7 +275,7 @@ variables:
   # 66% of its persons live with a supplement answerer against 0.01% for code 2.
   # It is the PERSON-level whole imputation, one adult in an otherwise
   # interviewed household. Source: cps.ipums.org UH_SUPREC_A2 page + IPUMS
-  # forum threads 4013 / 7075, 2026-09-01; API-accepted for 2015 and 2025.
+  # forum threads 4013 / 7075, 2026-09-01; API-accepted for 2015, 2025 and 2026.
   - UH_SUPREC_A2
   # Census household sequence number (the public-use file's h_seq), the merge
   # key for external ASEC-keyed products such as CBO's transfer imputations
@@ -421,7 +430,7 @@ variables:
   # break, which the program prunes per year and logs in each manifest.json:
   #   INCRETI1 INCRETI2 SRCRETI1 SRCRETI2   cps2015_03s-cps2018_03s only
   #                                          (IPUMS availability 1988-2018)
-  #   SRCRET1 SRCRET2                        cps2019_03s-cps2025_03s only
+  #   SRCRET1 SRCRET2                        cps2019_03s onward
   - INCRETI1
   - INCRETI2
   - SRCRETI1

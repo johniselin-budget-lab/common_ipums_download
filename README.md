@@ -221,7 +221,7 @@ one side) and both must be re-pulled to realign. Do the join lazily/per-year
 is the CPS ASEC replicate-weights layer (`cps_asec_common_repwt`), merged onto
 `cps_asec_common` on `SERIAL` (household) and `SERIAL + PERNUM` (person), with
 `ASECWTH`/`ASECWT` — the CPS weight names, not the ACS `HHWT`/`PERWT` — as the
-checksum. It covers all 11 samples, unlike the ACS layer, because
+checksum. It covers all 12 samples (ASEC 2015–2026), unlike the ACS layer, because
 CPS-ASEC-Corrected re-estimates weights inside every replicate for every income
 year in the panel.
 

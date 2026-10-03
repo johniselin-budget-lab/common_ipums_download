@@ -4,7 +4,7 @@
 # A companion pull to parameters.cps.yaml, in the same shape as the ACS
 # parameters.weights.yaml. It fetches ONLY the record-linking keys plus the two
 # ASEC successive-difference replicate-weight blocks (REPWT = 160 household
-# weights, REPWTP = 160 person weights) for the SAME 11 samples as the common
+# weights, REPWTP = 160 person weights) for the SAME 12 samples as the common
 # CPS extract, into a parallel folder tree you MERGE onto cps_asec_common.
 #
 #   module load R/4.4.2-gfbf-2024a
@@ -44,7 +44,7 @@ description: "Budget Lab common CPS ASEC replicate-weights layer (merge onto cps
 
 # ---- Samples ----------------------------------------------------------------
 # Must match parameters.cps.yaml exactly — unlike the ACS weights layer, which is
-# deliberately a subset, this covers all 11 samples because the consumer
+# deliberately a subset, this covers all 12 samples because the consumer
 # (CPS-ASEC-Corrected) re-estimates weights inside every replicate for every
 # income year in the panel, not just recent ones.
 samples:
@@ -59,6 +59,7 @@ samples:
   - cps2023_03s   # TY2022  <- anchor year
   - cps2024_03s   # TY2023
   - cps2025_03s   # TY2024
+  - cps2026_03s   # TY2025  (added 2026-10-03; probe extract #138 accepted, nothing dropped)
 
 variables:
   # --- join keys, identical to the common extract ------------------------------
